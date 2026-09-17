@@ -1,0 +1,14 @@
+# Archivos de entorno y credenciales locales
+**/.env
+!**/.env.example
+**/emqx.conf
+!**/emqx.conf.template
+
+# IDEs y editores
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs y temporales
+*.log
+**/__pycache__

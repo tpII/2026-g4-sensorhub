@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  simulador-dht:
+    build: .
+    container_name: sensorhub_simulador_dht
+    restart: unless-stopped
+    command: ["python", "-u", "simulador_dht.py"]
+    environment:
+      - BROKER_HOST=sensorhub_emqx
+      - MQTT_PORT=1883
+      - TOPICO_TELEMETRIA=sensorhub/dht/dht_simulado/telemetry
+      - INTERVALO_SEGUNDOS=5
+    networks:
+      - sensorhub_network
+
+  simulador-pir:
+    build: .
+    container_name: sensorhub_simulador_pir
+    restart: unless-stopped
+    command: ["python", "-u", "simulador_pir.py"]
+    environment:
+      - BROKER_HOST=sensorhub_emqx
+      - MQTT_PORT=1883
+      - TOPICO_TELEMETRIA=sensorhub/pir/pir_simulado/telemetry
+      - INTERVALO_MIN_SEGUNDOS=2
+      - INTERVALO_MAX_SEGUNDOS=8
+    networks:
+      - sensorhub_network
+
+  simulador-switch:
+    build: .
+    container_name: sensorhub_simulador_switch
+    restart: unless-stopped
+    command: ["python", "-u", "simulador_switch.py"]
+    environment:
+      - BROKER_HOST=sensorhub_emqx
+      - MQTT_PORT=1883
+      - TOPICO_COMANDOS=sensorhub/switch/switch_simulado/command
+      - TOPICO_TELEMETRIA=sensorhub/switch/switch_simulado/telemetry
+    networks:
+      - sensorhub_network
+
+  simulador-switch-commander:
+    build: .
+    container_name: sensorhub_simulador_switch_commander
+    restart: unless-stopped
+    command: ["python", "-u", "simulador_switch_commander.py"]
+    environment:
+      - BROKER_HOST=sensorhub_emqx
+      - MQTT_PORT=1883
+      - TOPICO_COMANDOS=sensorhub/switch/switch_simulado/command
+      - INTERVALO_SEGUNDOS=4
+    networks:
+      - sensorhub_network
+
+networks:
+  sensorhub_network:
+    external: true

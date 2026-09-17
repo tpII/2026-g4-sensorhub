@@ -1,0 +1,121 @@
+## ==============================================================================
+## SensorHub - Plantilla Bootstrap de Configuración de EMQX 5.x (Base)
+## Las variables ${VARIABLE} son inyectadas en frío al arrancar el contenedor
+## desde las variables de entorno definidas en Stack/.env
+## ==============================================================================
+
+node {
+  name = "emqx@127.0.0.1"
+  cookie = "sensorhub_emqx_secret_cookie"
+  data_dir = "data"
+}
+
+cluster {
+  name = sensorhub_cluster
+  discovery_strategy = manual
+}
+
+## ------------------------------------------------------------------------------
+## Dashboard Web de Administración (Puerto 18083)
+## ------------------------------------------------------------------------------
+dashboard {
+  default_username = "${EMQX_DASHBOARD__DEFAULT_USERNAME}"
+  default_password = "${EMQX_DASHBOARD__DEFAULT_PASSWORD}"
+  listeners {
+    http {
+      bind = 18083
+    }
+  }
+}
+
+## ------------------------------------------------------------------------------
+## Listeners MQTT (TCP 1883, SSL 8883, WS 8083, WSS 8084)
+## ------------------------------------------------------------------------------
+listeners {
+  tcp {
+    default {
+      bind = "0.0.0.0:1883"
+      max_connections = infinity
+      max_conn_rate = infinity
+    }
+  }
+  ssl {
+    default {
+      bind = "0.0.0.0:8883"
+      max_connections = infinity
+      ssl_options {
+        cacertfile = "${EMQX_ETC_DIR}/certs/cacert.pem"
+        certfile = "${EMQX_ETC_DIR}/certs/cert.pem"
+        keyfile = "${EMQX_ETC_DIR}/certs/key.pem"
+      }
+    }
+  }
+  ws {
+    default {
+      bind = "0.0.0.0:8083"
+      max_connections = infinity
+      websocket {
+        mqtt_path = "/mqtt"
+      }
+    }
+  }
+  wss {
+    default {
+      bind = "0.0.0.0:8084"
+      max_connections = infinity
+      ssl_options {
+        cacertfile = "${EMQX_ETC_DIR}/certs/cacert.pem"
+        certfile = "${EMQX_ETC_DIR}/certs/cert.pem"
+        keyfile = "${EMQX_ETC_DIR}/certs/key.pem"
+      }
+      websocket {
+        mqtt_path = "/mqtt"
+      }
+    }
+  }
+}
+
+## ------------------------------------------------------------------------------
+## Autorización de Clientes MQTT (Acceso abierto por defecto en red local)
+## ------------------------------------------------------------------------------
+authorization {
+  deny_action = ignore
+  no_match = allow
+  sources = [
+    {
+      type = file
+      enable = true
+      path = "${EMQX_ETC_DIR}/acl.conf"
+    }
+  ]
+}
+
+## ------------------------------------------------------------------------------
+## Conectores HTTP (Conexión base hacia InfluxDB v2 en la red de Docker)
+## ------------------------------------------------------------------------------
+connectors {
+  http {
+    influxdb {
+      url = "http://sensorhub_influxdb:8086"
+      enable = true
+      connect_timeout = "15s"
+      pool_size = 8
+      pool_type = random
+      enable_pipelining = 100
+      headers {
+        Authorization = "Token ${INFLUXDB_ADMIN_TOKEN}"
+        Content-Type = "text/plain; charset=utf-8"
+      }
+    }
+  }
+}
+
+## ------------------------------------------------------------------------------
+## Motor de Reglas (Rule Engine) de SensorHub - Configuración Base
+## Las acciones y reglas específicas de cada dispositivo son cargadas de forma modular
+## mediante las directivas 'include' generadas por SensorHub Bootstrap.
+## ------------------------------------------------------------------------------
+rule_engine {
+  ignore_sys_message = true
+}
+
