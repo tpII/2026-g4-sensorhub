@@ -1,0 +1,34 @@
+## ------------------------------------------------------------------------------
+## Regla y Acción para Disponibilidad y LWT de Dispositivos (Status)
+## ------------------------------------------------------------------------------
+actions {
+  http {
+    influx_status {
+      connector = influxdb
+      enable = true
+      parameters {
+        method = post
+        path = "/api/v2/write?org=${INFLUXDB_ORG}&bucket=${INFLUXDB_BUCKET}&precision=s"
+        headers {
+          Authorization = "Token ${INFLUXDB_ADMIN_TOKEN}"
+          Content-Type = "text/plain; charset=utf-8"
+        }
+        body = "device_status,device_type=${device_type},device_id=${device_id} online=${online},value=${value}i"
+      }
+    }
+  }
+}
+
+rule_engine {
+  rules {
+    rule_sensorhub_status {
+      sql = "SELECT nth(2, split(topic, '/')) as device_type, nth(3, split(topic, '/')) as device_id, clientid as client_id, payload.online as online, (CASE WHEN payload.online = true THEN 1 ELSE 0 END) as value FROM \"sensorhub/+/+/status\""
+      enable = true
+      description = "Registro de presencia y disponibilidad (LWT) hacia InfluxDB"
+      actions = [
+        "http:influx_status"
+      ]
+    }
+  }
+}
+
