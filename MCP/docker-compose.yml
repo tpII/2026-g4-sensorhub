@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sensorhub_mcp
+    restart: unless-stopped
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    volumes:
+      - ./:/app
+    environment:
+      - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-sensorhub_emqx}
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+      - INFLUXDB_URL=${INFLUXDB_URL:-http://sensorhub_influxdb:8086}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-sensorhub_admin_secret_token_123}
+      - INFLUXDB_ORG=${INFLUXDB_ORG:-sensorhub}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET:-sensorhub}
+      - MCP_HTTP_PATH=${MCP_HTTP_PATH:-/mcp}
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+    networks:
+      - sensorhub_network
+
+networks:
+  sensorhub_network:
+    name: sensorhub_network
+    external: true
+
