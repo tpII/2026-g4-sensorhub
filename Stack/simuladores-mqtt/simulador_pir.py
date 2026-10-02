@@ -13,6 +13,7 @@ BROKER_HOST = os.getenv("BROKER_HOST", "sensorhub_emqx")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 USE_TLS = os.getenv("USE_TLS", "false").lower() in ("true", "1", "yes") or MQTT_PORT in (443, 8883)
 TOPICO_TELEMETRIA = os.getenv("TOPICO_TELEMETRIA", "sensorhub/pir/pir_simulado/telemetry")
+TOPICO_STATUS = os.getenv("TOPICO_STATUS", "sensorhub/pir/pir_simulado/status")
 
 # Rango aleatorio de espera entre eventos de movimiento
 INTERVALO_MIN_SEGUNDOS = int(os.getenv("INTERVALO_MIN_SEGUNDOS", "2"))
@@ -30,6 +31,8 @@ client = mqtt.Client()
 if USE_TLS:
     client.tls_set()
 
+client.will_set(TOPICO_STATUS, json.dumps({"online": False}), qos=1, retain=True)
+
 conectado = False
 while not conectado:
     try:
@@ -41,6 +44,7 @@ while not conectado:
         time.sleep(3)
 
 client.loop_start()
+client.publish(TOPICO_STATUS, json.dumps({"online": True}), qos=1, retain=True)
 
 
 # LOOP: Alterna entre movimiento detectado (true) y reposo (false) con intervalo aleatorio

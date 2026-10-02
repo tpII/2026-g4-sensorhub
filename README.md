@@ -9,4 +9,4 @@ Taller de Proyecto II 2026 — Grupo G4 — SensorHub
 
 ---
 
-Wiki del proyecto en: [https://github.com/tpII/2026-g4-sensorhub/wiki]
+Wiki del proyecto en: [wiki](https://github.com/tpII/2026-g4-sensorhub/wiki)
