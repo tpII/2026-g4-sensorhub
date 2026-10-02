@@ -43,7 +43,8 @@ while True:
     estado_actual = "on" if estado_actual == "off" else "off"
 
     payload = json.dumps({
-        "state": estado_actual
+        "state": estado_actual,
+        "ts": int(time.time() * 1000)
     })
 
     client.publish(TOPICO_COMANDOS, payload, qos=1)
