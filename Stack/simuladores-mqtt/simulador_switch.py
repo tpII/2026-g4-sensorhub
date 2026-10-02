@@ -11,6 +11,7 @@ BROKER_HOST = os.getenv("BROKER_HOST", "sensorhub_emqx")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 TOPICO_COMANDOS = os.getenv("TOPICO_COMANDOS", "sensorhub/switch/switch_simulado/command")
 TOPICO_TELEMETRIA = os.getenv("TOPICO_TELEMETRIA", "sensorhub/switch/switch_simulado/telemetry")
+TOPICO_STATUS = os.getenv("TOPICO_STATUS", "sensorhub/switch/switch_simulado/status")
 
 print(f"Iniciando simulador de Switch...")
 print(f"Conectando a {BROKER_HOST}:{MQTT_PORT}...")
@@ -24,6 +25,7 @@ def on_connect(client, userdata, flags, rc):
     print(f"Conectado exitosamente al broker MQTT!")
     client.subscribe(TOPICO_COMANDOS, qos=1)
     print(f"Suscrito al topico de comandos: {TOPICO_COMANDOS}", flush=True)
+    client.publish(TOPICO_STATUS, json.dumps({"online": True}), qos=1, retain=True)
 
 
 def on_message(client, userdata, msg):
@@ -54,6 +56,7 @@ def on_message(client, userdata, msg):
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
+client.will_set(TOPICO_STATUS, json.dumps({"online": False}), qos=1, retain=True)
 
 conectado = False
 while not conectado:

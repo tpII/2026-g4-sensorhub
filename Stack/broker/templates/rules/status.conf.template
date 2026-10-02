@@ -8,7 +8,7 @@ actions {
       enable = true
       parameters {
         method = post
-        path = "/api/v2/write?org=${INFLUXDB_ORG}&bucket=${INFLUXDB_BUCKET}&precision=s"
+        path = "/api/v2/write?org=${INFLUXDB_ORG}&bucket=${INFLUXDB_BUCKET}&precision=ns"
         headers {
           Authorization = "Token ${INFLUXDB_ADMIN_TOKEN}"
           Content-Type = "text/plain; charset=utf-8"

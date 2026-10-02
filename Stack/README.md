@@ -10,20 +10,20 @@ El stack está diseñado bajo el principio **stateless & cold-boot**, permitiend
 
 ```mermaid
 flowchart TD
-    C1["**Capa 1: Interfaz de Usuario**\nChat LLM / Asistente de IA (Claude, etc.)"]
+    C1["**Capa 1: Interfaz de Usuario**<br/>Chat LLM / Asistente de IA (Claude, etc.)"]
 
-    C2["**Capa 2: Servidor MCP**\nTools: list_devices · get_state · set_switch ..."]
+    C2["**Capa 2: Servidor MCP**<br/>Tools: list_devices · get_state · set_switch ···"]
 
-    C3["**Capa 3: Persistencia TSDB**\nInfluxDB v2\n(Almacenamiento con series temporales)"]
+    C3["**Capa 3: Persistencia TSDB**<br/>InfluxDB v2<br/>(Almacenamiento con series temporales)"]
 
-    C4["**Capa 4: Broker de Mensajes**\nEMQX 5\n(Motor de reglas sin estado)"]
+    C4["**Capa 4: Broker de Mensajes**<br/>EMQX 5<br/>(Motor de reglas sin estado)"]
 
     subgraph C5["Capa 5: Nodos de Borde (ESP32)"]
         direction LR
-        dht["dht\nSensor Temp/Humedad\n"]
-        pir["pir\nSensor de Movimiento\n"]
-        sw["switch\nActuador de Relé /\nIluminación (con Feedback)"]
-        ...
+        dht["dht<br/>Sensor Temp/Humedad"]
+        pir["pir<br/>Sensor de Movimiento"]
+        sw["switch<br/>Actuador de Relé /<br/>Iluminación (con Feedback)"]
+        mas["···"]
     end
 
     C1 -->|" "| C2
@@ -130,6 +130,7 @@ docker compose ps
 > El token de administrador configurado por defecto para InfluxDB es:
 > `sensorhub_admin_secret_token_123`
 > La organización por defecto es `sensorhub` y el bucket es `sensorhub`.
+> Estos son valores de **desarrollo local**, publicados a propósito en `.env.example` y como default en `docker-compose.yml` para que el stack levante sin pasos manuales. No son secretos de producción: si el stack se expone fuera de la máquina de desarrollo, deben reemplazarse por valores propios en `.env`.
 
 ---
 
@@ -172,5 +173,5 @@ En Stack/MQTT.md se encuentra informacion asociada a las pruebas.
 ## Documentación Relacionada
 
 - [Especificación de Tópicos y Payloads MQTT](./MQTT.md): Detalle normativo de los tópicos, esquemas JSON y convenciones de nombres.
-- [Firmware ESP32 (SensorHub)](../Firmwares/sensorHub/README.md): Nodos sensores y actuadores (DHT, PIR, Switch).
-- [Herramientas y Utilidades de Firmware](../Firmwares/utils/README.md): Scripts y utilidades de compilación, flasheo y monitoreo.
+- [Firmware ESP32 (SensorHub)](../Firmware/sensorHub/README.md): Nodos sensores y actuadores (DHT, PIR, Switch). *(pendiente: el directorio `Firmware/` todavía no tiene contenido versionado)*
+- [Herramientas y Utilidades de Firmware](../Firmware/utils/README.md): Scripts y utilidades de compilación, flasheo y monitoreo. *(pendiente, idem anterior)*
