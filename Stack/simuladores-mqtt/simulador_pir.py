@@ -44,7 +44,7 @@ while not conectado:
         time.sleep(3)
 
 client.loop_start()
-client.publish(TOPICO_STATUS, json.dumps({"online": True}), qos=1, retain=True)
+client.publish(TOPICO_STATUS, json.dumps({"online": True, "ts": int(time.time() * 1000)}), qos=1, retain=True)
 
 
 # LOOP: Alterna entre movimiento detectado (true) y reposo (false) con intervalo aleatorio
@@ -55,7 +55,8 @@ while True:
     estado_movimiento = not estado_movimiento
 
     payload = json.dumps({
-        "motion": estado_movimiento
+        "motion": estado_movimiento,
+        "ts": int(time.time() * 1000)
     })
 
     client.publish(TOPICO_TELEMETRIA, payload, qos=1)

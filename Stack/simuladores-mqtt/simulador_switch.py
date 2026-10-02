@@ -25,7 +25,7 @@ def on_connect(client, userdata, flags, rc):
     print(f"Conectado exitosamente al broker MQTT!")
     client.subscribe(TOPICO_COMANDOS, qos=1)
     print(f"Suscrito al topico de comandos: {TOPICO_COMANDOS}", flush=True)
-    client.publish(TOPICO_STATUS, json.dumps({"online": True}), qos=1, retain=True)
+    client.publish(TOPICO_STATUS, json.dumps({"online": True, "ts": int(time.time() * 1000)}), qos=1, retain=True)
 
 
 def on_message(client, userdata, msg):
@@ -46,7 +46,7 @@ def on_message(client, userdata, msg):
         return
 
     # Responder publicando el nuevo estado fisico en el canal de telemetria
-    feedback = json.dumps({"state": state})
+    feedback = json.dumps({"state": state, "ts": int(time.time() * 1000)})
     client.publish(TOPICO_TELEMETRIA, feedback, qos=1, retain=True)
     print(f"[{TOPICO_TELEMETRIA}] -> {feedback}", flush=True)
 

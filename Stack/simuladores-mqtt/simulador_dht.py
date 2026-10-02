@@ -38,7 +38,7 @@ while not conectado:
         time.sleep(3)
 
 client.loop_start()
-client.publish(TOPICO_STATUS, json.dumps({"online": True}), qos=1, retain=True)
+client.publish(TOPICO_STATUS, json.dumps({"online": True, "ts": int(time.time() * 1000)}), qos=1, retain=True)
 
 # LOOP: Incrementa de a 10 grados hasta 90 y vuelve a empezar
 
@@ -49,7 +49,8 @@ while True:
 
         payload = json.dumps({
             "temperature": float(temperatura),
-            "humidity": humedad
+            "humidity": humedad,
+            "ts": int(time.time() * 1000)
         })
 
         client.publish(TOPICO_TELEMETRIA, payload, qos=1, retain=True)
