@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
 SensorHub - Servidor MCP Streamable HTTP
-Expone la lectura de telemetría de temperatura actual desde InfluxDB.
+Infraestructura base (conexiones a InfluxDB/MQTT) sin tools activas todavía.
+El catálogo de tools a implementar está propuesto en la wiki, página 06
+(Diseño de Tools MCP por Dispositivo) — las versiones anteriores de este
+archivo no coincidían con esa propuesta (granularidad, nombres o estrategia
+de lectura) y se retiraron hasta reconstruirlas alineadas a ese diseño.
 """
 
 import os
@@ -75,131 +79,11 @@ def _query_latest_telemetry(measurement: str, field: str, device_id: str, hours:
     return None, None
 
 
-# Registra la funcion como una herramienta invocable por el modelo de lenguaje
-@mcp.tool()
-def get_current_temperature(device_id: str) -> str:
-    """
-    Obtiene la temperatura actual y la fecha/hora de la última lectura registrada en InfluxDB
-    para un sensor de temperatura (tipo DHT) dado su ID exacto.
-    
-    Args:
-        device_id: Identificador exacto del sensor (ejemplo: 'dht_simulado' o MAC '983dae529858').
-    """
-    try:
-        val, time_str = _query_latest_telemetry("dht_telemetry", "temperature", device_id)
-        if val is not None:
-            return f"La temperatura actual del sensor '{device_id}' es {float(val):.1f}°C (registrada a las {time_str})."
-        return f"No se encontraron lecturas de temperatura en las últimas 24h para el sensor '{device_id}'."
-    except Exception as e:
-        return f"Error al consultar InfluxDB: {str(e)}"
-
-
-@mcp.tool()
-def get_current_humidity(device_id: str) -> str:
-    """
-    Obtiene la humedad relativa actual y la fecha/hora de la última lectura registrada en InfluxDB
-    para un sensor de clima (tipo DHT) dado su ID exacto.
-
-    Args:
-        device_id: Identificador exacto del sensor (ejemplo: 'dht_simulado' o MAC '983dae529858').
-    """
-    try:
-        val, time_str = _query_latest_telemetry("dht_telemetry", "humidity", device_id)
-        if val is not None:
-            return f"La humedad actual del sensor '{device_id}' es {float(val):.1f}% (registrada a las {time_str})."
-        return f"No se encontraron lecturas de humedad en las últimas 24h para el sensor '{device_id}'."
-    except Exception as e:
-        return f"Error al consultar InfluxDB: {str(e)}"
-
-
-@mcp.tool()
-def get_motion_state(device_id: str) -> str:
-    """
-    Obtiene el último estado de movimiento registrado en InfluxDB para un sensor PIR dado su ID exacto.
-    El campo 'motion' es booleano: true indica detección activa, false indica zona despejada.
-
-    Args:
-        device_id: Identificador exacto del sensor PIR (ejemplo: MAC '983dae529858').
-    """
-    try:
-        val, time_str = _query_latest_telemetry("pir_telemetry", "motion", device_id)
-        if val is not None:
-            estado = "movimiento detectado 🔴" if val else "zona despejada ✅"
-            return f"El sensor PIR '{device_id}' reporta {estado} (última lectura: {time_str})."
-        return f"No se encontraron eventos de movimiento en las últimas 24h para el sensor '{device_id}'."
-    except Exception as e:
-        return f"Error al consultar InfluxDB: {str(e)}"
-
-
-@mcp.tool()
-def get_switch_state(device_id: str) -> str:
-    """
-    Obtiene el último estado confirmado del actuador Switch registrado en InfluxDB para un dispositivo
-    dado su ID exacto. El campo 'state' es un string: 'on' (encendido) o 'off' (apagado).
-
-    Args:
-        device_id: Identificador exacto del actuador switch (ejemplo: MAC '9454c5b096b0').
-    """
-    try:
-        val, time_str = _query_latest_telemetry("switch_telemetry", "state", device_id)
-        if val is not None:
-            estado = "encendido 💡" if val == "on" else "apagado ⬛"
-            return f"El actuador switch '{device_id}' está {estado} (último acuse: {time_str})."
-        return f"No se encontraron registros de estado en las últimas 24h para el switch '{device_id}'."
-    except Exception as e:
-        return f"Error al consultar InfluxDB: {str(e)}"
-
-
-@mcp.tool()
-def list_devices(hours: int = 24) -> str:
-    """
-    Lista todos los dispositivos (device_id y device_type) que publicaron telemetría en InfluxDB
-    durante las últimas N horas. Útil para descubrir qué sensores y actuadores están activos
-    en la red SensorHub sin necesidad de conocer los IDs de antemano.
-
-    Args:
-        hours: Ventana de tiempo hacia atrás en horas (por defecto: 24).
-               Valores recomendados: 1 (última hora), 24 (último día), 168 (última semana).
-    """
-    # Consulta los tres measurements que registran telemetría de dispositivos
-    measurements = [
-        ("dht_telemetry", "dht"),
-        ("pir_telemetry", "pir"),
-        ("switch_telemetry", "switch"),
-    ]
-
-    found = []
-
-    try:
-        with get_influx_client() as client:
-            query_api = client.query_api()
-
-            for measurement, device_type in measurements:
-                flux_query = f'''
-                from(bucket: "{INFLUXDB_BUCKET}")
-                  |> range(start: -{hours}h)
-                  |> filter(fn: (r) => r._measurement == "{measurement}")
-                  |> keep(columns: ["device_id"])
-                  |> distinct(column: "device_id")
-                '''
-                tables = query_api.query(flux_query, org=INFLUXDB_ORG)
-
-                for table in tables:
-                    for record in table.records:
-                        dev_id = record.get_value()
-                        found.append(f"  - [{device_type}] {dev_id}")
-
-        if not found:
-            return f"No se encontraron dispositivos con actividad en las últimas {hours}h."
-
-        device_list = "\n".join(found)
-        return (
-            f"Dispositivos activos en SensorHub (últimas {hours}h): {len(found)} encontrados.\n"
-            f"{device_list}"
-        )
-
-    except Exception as e:
-        return f"Error al consultar InfluxDB: {str(e)}"
+# TODO: reconstruir el catálogo de tools siguiendo la propuesta de la wiki,
+# página 06 (Diseño de Tools MCP por Dispositivo) — incluyendo la resolución
+# de device_id por nombre amigable (sección 2) antes de las tools de lectura,
+# y la estrategia MQTT-primero/InfluxDB-respaldo para los dispositivos con
+# retain=true + ts (sección 3, y 05 sección 4).
 
 
 # Punto de entrada principal
