@@ -1,0 +1,4 @@
+device_type,device_id,friendly_name
+dht,dht_simulado,living
+pir,pir_simulado,cocina
+switch,switch_simulado,oficina
