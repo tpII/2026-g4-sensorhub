@@ -9,7 +9,7 @@ MCP/
 ├── .env.example           # Plantilla de variables de entorno
 ├── .env                    # Variables activas (ignorado por Git)
 ├── devices.csv             # Registro manual de dispositivos (device_type, device_id, nombre amigable)
-├── docker-compose.yml      # Levanta el servidor como contenedor en la red del Stack
+├── docker-compose.yml      # Levanta el servidor y, opcionalmente, el MCP Inspector
 ├── Dockerfile
 ├── requirements.txt
 └── sensorhub_mcp/          # El paquete Python del servidor
@@ -87,11 +87,26 @@ print(get_current_climate(device_id))
 
 ### 2. Con el MCP Inspector (recomendado para probar las tools como las vería un LLM, sin necesitar un modelo)
 
+**Opción A — ya viene como servicio en `docker-compose.yml`:**
+
+```bash
+cd MCP
+docker compose up -d mcp-inspector
+```
+
+Abri `http://localhost:6274` en el navegador. Como corre en la misma red que `mcp-server`, para conectarlo hay que usar el nombre del contenedor, no `localhost`: **`http://sensorhub_mcp:8000/mcp`**.
+
+> La autenticación de la UI viene deshabilitada (`DANGEROUSLY_OMIT_AUTH`) a propósito, para no tener que copiar un token cada vez en desarrollo local. **No exponer este puerto con ngrok publicar en otra interfaz** sin volver a habilitar la autenticación — a diferencia del servidor MCP solo, el Inspector es una UI pensada para invocar tools con un click, así que sin token cualquiera que llegue al puerto puede operar los dispositivos.
+
+**Opción B — suelto, sin Docker:**
+
 ```bash
 npx @modelcontextprotocol/inspector
 ```
 
-Abre una UI local — ahí se configura la conexión como transporte **Streamable HTTP** apuntando a `http://localhost:8000/mcp` (o el host/puerto que corresponda), y desde esa UI se pueden listar e invocar las tools a mano, viendo el JSON de entrada/salida de cada llamada.
+En este caso la URL a conectar es `http://localhost:8000/mcp` (ahí sí vale `localhost`, porque no está corriendo dentro de la red de Docker).
+
+En cualquiera de las dos opciones, una vez conectado se pueden listar e invocar las tools a mano desde la UI, viendo el JSON de entrada/salida de cada llamada.
 
 ### 3. Conectando un cliente real (Claude Desktop, Claude Code, etc.)
 

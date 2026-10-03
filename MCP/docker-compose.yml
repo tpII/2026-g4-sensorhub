@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mcp-server:
     build:
@@ -23,6 +21,31 @@ services:
       - MCP_PORT=8000
     networks:
       - sensorhub_network
+
+  # MCP Inspector: UI para invocar las tools a mano sin un LLM de por medio
+  # (ver MCP/README.md, sección "Cómo probarlo"). Dentro de esta red, el
+  # servidor MCP de arriba se alcanza como http://sensorhub_mcp:8000/mcp.
+  mcp-inspector:
+    image: ghcr.io/modelcontextprotocol/inspector:2.9.0
+    container_name: sensorhub_mcp_inspector
+    restart: unless-stopped
+    ports:
+      # DANGEROUSLY_OMIT_AUTH de
+      # abajo saca el token de autenticación de la UI, así que no conviene
+      # que quede alcanzable desde otra cosa que no sea esta máquina.
+      - "127.0.0.1:6274:6274"
+    environment:
+      - HOST=0.0.0.0
+      - MCP_AUTO_OPEN_ENABLED=false
+      - DANGEROUSLY_OMIT_AUTH=true
+      - MCP_INSPECTOR_SECRET_STORE=file
+    volumes:
+      - mcp_inspector_data:/home/node/.mcp-inspector
+    networks:
+      - sensorhub_network
+
+volumes:
+  mcp_inspector_data:
 
 networks:
   sensorhub_network:
