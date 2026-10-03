@@ -18,10 +18,12 @@ from ..timeutils import parse_iso8601, to_flux_time
 MQTT_STALE_AFTER_SECONDS = 30
 
 # Ventana hacia atrás para buscar la lectura vigente en un timestamp pedido
-# (get_climate_at) — el DHT publica cada pocos segundos, así que alcanza
-# con una ventana chica; si no hay nada en ese rango, se informa en vez de
-# devolver un dato de hace demasiado tiempo.
-CLIMATE_AT_WINDOW_HOURS = 2
+# (get_climate_at) — mismo criterio y mismo valor que MQTT_STALE_AFTER_SECONDS,
+# porque es la misma pregunta de fondo ("¿hace cuánto no publica el DHT?"),
+# solo que referida a un instante del pasado en vez de a ahora. Si no hay
+# nada en ese rango, se informa en vez de devolver un dato de hace
+# demasiado tiempo. 
+CLIMATE_AT_WINDOW_SECONDS = 60
 
 
 @mcp.tool()
@@ -90,7 +92,7 @@ def get_climate_at(device_id: str, timestamp: str) -> str:
     except ValueError:
         return f"No pude interpretar '{timestamp}' como una fecha/hora válida (formato esperado: ISO 8601)."
 
-    start_rfc3339 = to_flux_time(moment - timedelta(hours=CLIMATE_AT_WINDOW_HOURS))
+    start_rfc3339 = to_flux_time(moment - timedelta(seconds=CLIMATE_AT_WINDOW_SECONDS))
     stop_rfc3339 = to_flux_time(moment + timedelta(seconds=1))
 
     try:
@@ -106,8 +108,8 @@ def get_climate_at(device_id: str, timestamp: str) -> str:
 
     if temp_val is None and hum_val is None:
         return (
-            f"No encontré lecturas del sensor '{device_id}' en las {CLIMATE_AT_WINDOW_HOURS}h "
-            f"previas a {timestamp}."
+            f"No encontré lecturas del sensor '{device_id}' en los {CLIMATE_AT_WINDOW_SECONDS}s "
+            f"previos a {timestamp}."
         )
 
     partes = []
