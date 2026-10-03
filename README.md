@@ -22,22 +22,11 @@
 
 ## 📖 Descripción del Proyecto
 
-**SensorHub** es una plataforma IoT experimental que busca conectar dos mundos tecnológicamente muy diferentes:
+**SensorHub** es un proyecto experimental que conecta la computación física y el Internet de las Cosas (IoT) con los Modelos de Lenguaje (LLM) y los agentes inteligentes. Los nodos IoT —basados en microcontroladores, sensores y actuadores— intercambian información mediante tópicos MQTT estandarizados. EMQX procesa los mensajes y las reglas del sistema persisten las series temporales y los eventos en InfluxDB.
 
-- **La computación física y el Internet de las Cosas (IoT):** Microcontroladores de bajo consumo (ESP32), sensores analógicos y digitales, buses asíncronos y protocolos de red de borde.
-- **Los Modelos de Lenguaje (LLM) y Agentes Inteligentes:** Sistemas de razonamiento en lenguaje natural capaces de interpretar intenciones humanas, sintetizar información compleja y tomar decisiones contextuales.
+El servidor **Model Context Protocol (MCP)** ofrece a los asistentes de IA una interfaz estandarizada para consultar la información de los dispositivos y, cuando corresponda, solicitar acciones sobre ellos. Así, el modelo puede interpretar solicitudes en lenguaje natural sin necesitar conocer los detalles internos de MQTT ni de la base de datos.
 
-Para que un LLM pueda operar sobre un hogar, laboratorio o industria, requiere una interfaz estandarizada, determinística y segura. Esa interfaz es el **Model Context Protocol (MCP)**.
-
-A través de herramientas (*tools*) estandarizadas, asistentes de IA (como Claude, Gemini o modelos locales) pueden:
-
-| Capacidad | Descripción |
-| :--- | :--- |
-| 🌡️ **Telemetría ambiental** | Lecturas en tiempo real e históricas de temperatura y humedad (sensores DHT) |
-| 🚨 **Monitoreo de presencia** | Detección de movimiento reactiva (sensores PIR) |
-| 💡 **Control de actuadores** | Conmutación de relés y luces con confirmación física (*feedback loop*) |
-| 🔍 **Descubrimiento de dispositivos** | Detección dinámica de la flota (`list_devices`) y supervisión via LWT |
-| ⏱️ **Registro temporal preciso** | Ingesta de datos con marcas de tiempo en milisegundos (`ts`) desde el origen |
+La arquitectura mantiene desacoplados los dispositivos, el almacenamiento y la interfaz con el LLM: los nodos siguen publicando datos aunque el servidor MCP o el modelo no estén disponibles, y la información histórica permanece en InfluxDB.
 
 ---
 
@@ -49,7 +38,7 @@ El sistema opera bajo un esquema desacoplado de **5 capas**:
 flowchart TD
     C1["**Capa 1: Interfaz de Usuario / Agente**<br/>Chat LLM (Claude Desktop, agentes locales, etc.)"]
 
-    C2["**Capa 2: Servidor MCP**<br/>FastMCP (Python) · Tools: list_devices · get_current_temperature · get_current_humidity · get_motion_state · get_switch_state"]
+    C2["**Capa 2: Servidor MCP**<br/>FastMCP (Python) · Interfaz para consultar datos y solicitar acciones sobre dispositivos"]
 
     C3["**Capa 3: Persistencia TSDB**<br/>InfluxDB v2 (Series temporales & API Flux)"]
 
