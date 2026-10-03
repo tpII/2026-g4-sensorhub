@@ -255,41 +255,142 @@ Los estados de actuadores se almacenan en InfluxDB con **doble representación**
 
 ## 🤖 Servidor MCP y LLM
 
-### FastMCP (Python)
+### FastMCP y Arquitectura Modular (Python)
 
-El servidor MCP está implementado en Python usando la librería **FastMCP**, expuesto vía transporte `Streamable HTTP` en el endpoint `/mcp`. Este transporte permite interacción desacoplada dentro de contenedores Docker.
+El servidor MCP está implementado en Python utilizando la librería **FastMCP**, expuesto mediante transporte **Streamable HTTP** en el endpoint `/mcp` (puerto por defecto `8000`). Este diseño permite la comunicación desacoplada y estandarizada con clientes LLM (como Claude Desktop, Claude Code o agentes autónomos), aislando la complejidad de los protocolos IoT (MQTT y Flux/InfluxDB).
 
-### Diseño de Tools
+El paquete `MCP/sensorhub_mcp/` está estructurado modularmente:
 
-```python
-@mcp.tool()
-def get_current_temperature(device_id: str) -> str:
-    """
-    Obtiene la temperatura actual del sensor DHT especificado.
+- `mcp_app.py`: Instancia y configuración del servidor FastMCP.
+- `mqtt_client.py`: Cliente MQTT ligero para lectura directa de mensajes retenidos (`retain=true`) con baja latencia.
+- `influx_client.py`: Cliente de InfluxDB v2 para consultas analíticas y agregaciones temporales con Flux.
+- `devices.py`: Carga y gestión del registro de dispositivos (`devices.csv`), con soporte de búsqueda aproximada y validación de seguridad de IDs.
+- `timeutils.py`: Parseo y normalización de timestamps ISO 8601 a formatos compatibles con RFC3339 de Flux.
+- `tools/`: Catálogo de tools invocables por el LLM (`climate.py`, `device_resolution.py`).
 
-    Args:
-        device_id: Identificador único del dispositivo (derivado de su MAC).
+---
 
-    Returns:
-        Temperatura actual en grados Celsius como texto formateado.
-    """
-    # 1. Intenta lectura directa MQTT (retain=true → baja latencia)
-    # 2. Si ts es antiguo o no disponible → consulta Flux a InfluxDB
-```
+### Principios de Diseño Normativo de Tools (Wiki 06)
 
-Características del diseño:
-- **Docstrings estructurados:** Son la guía principal que el LLM usa para decidir cuándo y cómo invocar cada tool.
-- **Retornos en lenguaje natural:** Las tools devuelven strings formateados, no JSON crudo.
-- **Tools específicas y tipadas:** Se evitan tools genéricas (ej. `publicar_topico`) para prevenir *prompt injection* y mantener límites determinísticos.
-- **`resolve_device_id`:** Traduce nombres amigables ("living", "cocina") a IDs físicos (MACs) usando coincidencias aproximadas con `difflib`.
+Siguiendo las definiciones de la **Wiki 06 ([Diseño de Tools MCP por Dispositivo](https://github.com/tpII/2026-g4-sensorhub/wiki/06-Diseno-de-Tools-MCP-por-Dispositivo))**, el servidor implementa los siguientes criterios de diseño:
+
+1. **Tools Específicas por Dispositivo vs. Genéricas:**
+   - Se evitan tools genéricas como `publicar_topico` o `query_influx(flux)`. Estas obligarían al LLM a conocer detalles internos del backend (nombres de *measurements* o *fields*) y crearían un vector crítico de **prompt injection** con capacidades destructivas en la base de datos o el broker.
+   - Las tools son fuertemente tipadas y con docstrings auto-contenidos, guiando al modelo de forma determinística.
+
+2. **Una Tool por Forma de Respuesta:**
+   - Se descartan herramientas con parámetros condicionales ambiguos (como un parámetro `mode` para alternar entre valor puntual o histórico).
+   - Se dividen en tools para lecturas de un instante (`get_current_climate`, `get_climate_at`) y tools para tendencias agregadas (`get_climate_trend`).
+
+3. **Respuestas en Lenguaje Natural Sintetizado:**
+   - En lugar de devolver objetos JSON crudos que el LLM deba interpretar, las tools retornan oraciones claras y contextualizadas con unidades (°C, %), marcas de tiempo legibles y avisos de estado.
+
+4. **Resolución de Identidades en Dos Pasos (`resolve_device_id`):**
+   - El usuario común interactúa mediante descripciones amigables (*"el sensor del living"*, *"la luz de la oficina"*).
+   - El LLM realiza un encadenamiento en dos fases:
+     1. Invoca `resolve_device_id(description, device_type)` para traducir la descripción al `device_id` canónico utilizando búsqueda difusa (`difflib`) sobre `devices.csv`.
+     2. Llama a la tool de datos correspondiente utilizando dicho `device_id`.
+   - Si no hay coincidencia certera, la tool prefiere solicitar aclaración antes de devolver un dispositivo erróneo.
+
+5. **Detección de Datos Desactualizados (*Stale Data*):**
+   - Dado que los mensajes MQTT retenidos no expiran automáticamente, si el `ts` del payload retenido supera un umbral de obsolescencia (`MQTT_STALE_AFTER_SECONDS = 30`), la tool advierte explícitamente que el sensor podría estar desconectado.
+
+---
+
+### Catálogo de Tools Implementadas
+
+| Tool | Argumentos | Fuente / Estrategia | Descripción |
+| :--- | :--- | :--- | :--- |
+| `resolve_device_id` | `description: str`, `device_type: Optional[str]` | Registro local (`devices.csv`) + `difflib` | Traduce lenguaje libre al `device_id` canónico exacto. |
+| `get_current_climate` | `device_id: str` | MQTT (`retain=true`) con fallback a InfluxDB `last()` | Retorna temperatura y humedad actuales con marca de tiempo UTC. |
+| `get_climate_at` | `device_id: str`, `timestamp: str` (ISO 8601) | InfluxDB v2 (ventana Flux de 2h hacia atrás) | Recupera la lectura climática vigente en un momento puntual del pasado. |
+| `get_climate_trend` | `device_id: str`, `start: str`, `end: str` | InfluxDB v2 (agregaciones `min`, `max`, `mean`) | Resume la variación climática en lenguaje natural en un rango de tiempo. |
+
+#### Roadmap de Tools por Dispositivo (según Wiki 06)
+
+- **Sensor PIR (Presencia):**
+  - `get_last_motion_state(device_id)`: Último estado registrado (solo InfluxDB).
+  - `had_motion_in_range(device_id, start, end)`: Consulta booleana si hubo actividad.
+  - `get_last_motion_event(device_id)`: Última detección positiva (`motion=true`).
+  - `count_motion_events(device_id, start, end)`: Conteo de transiciones de entrada.
+- **Actuador Switch (Relé):**
+  - `set_switch_state(device_id, state)`: Publica en `command` y verifica confirmación en `telemetry`.
+  - `get_switch_state(device_id)`: Estado de conmutación actual.
+  - `get_switch_on_duration(device_id, start, end)`: Tiempo acumulado encendido.
+  - `count_switch_toggles(device_id, start, end)`: Cantidad de conmutaciones en el rango.
+- **Supervisión de Estado (Status):**
+  - `get_device_availability(device_type, device_id)`: Diagnóstico de conectividad MQTT / LWT.
+
+---
 
 ### Estrategia de Consulta: MQTT vs. InfluxDB
 
-| Dispositivo | `retain` | Estrategia |
-| :--- | :---: | :--- |
-| **DHT** (temp/humedad) | ✅ | Primero MQTT (baja latencia); cae a InfluxDB si `ts` es antiguo |
-| **PIR** (movimiento) | ❌ | Directamente InfluxDB — consulta Flux sobre ventana temporal |
-| **Switch** (actuador) | ✅ | MQTT para estado actual; InfluxDB para histórico |
+| Dispositivo | `retain` | Estrategia de Lectura | Justificación Técnica |
+| :--- | :---: | :--- | :--- |
+| **DHT** (clima) | ✅ | **MQTT primero**, cae a **InfluxDB** si falla o no hay retención | Mínima latencia para el dato actual; InfluxDB para rangos y caídas. |
+| **PIR** (presencia) | ❌ | **Directamente InfluxDB** | `retain=false` previene falsos positivos de movimiento viejo. |
+| **Switch** (actuador) | ✅ | **MQTT** para estado actual; **InfluxDB** para auditoría y métricas | El estado retenido refleja la confirmación del último cambio físico. |
+| **Status** (LWT) | ✅ | **MQTT** (tópico de estado) | Broker entrega de inmediato si el nodo está conectado o desconectado. |
+
+---
+
+### Despliegue y Ejecución del Servidor MCP
+
+#### 1. Prerrequisitos
+El servidor MCP consulta los datos que generan el Stack y los simuladores. Antes de iniciarlo:
+```bash
+# 1. Levantar EMQX e InfluxDB
+cd Stack && docker compose up -d
+
+# 2. Levantar los simuladores de sensores
+cd simuladores-mqtt && docker compose up -d
+```
+
+#### 2. Opciones de Ejecución
+
+- **Opción A — Python local (recomendado para desarrollo y depuración):**
+  ```bash
+  cd MCP
+  cp .env.example .env        # Ajustar hosts a localhost si se ejecuta fuera de Docker
+  pip install -r requirements.txt
+  python -m sensorhub_mcp
+  ```
+
+- **Opción B — Contenedor Docker (integrado en la red del Stack):**
+  ```bash
+  cd MCP
+  docker compose up -d --build
+  ```
+  El servicio se conecta a `sensorhub_network` y resuelve `sensorhub_emqx` e `sensorhub_influxdb` automáticamente.
+
+El servidor quedará disponible en `http://localhost:8000/mcp`.
+
+---
+
+### Pruebas y Validación
+
+1. **Llamadas directas en Python (sin transporte de red):**
+   ```bash
+   cd MCP
+   python -c "from sensorhub_mcp.tools.device_resolution import resolve_device_id; from sensorhub_mcp.tools.climate import get_current_climate; id = resolve_device_id('living'); print('Device ID:', id); print(get_current_climate(id))"
+   ```
+
+2. **MCP Inspector (interfaz gráfica para depurar tools):**
+   ```bash
+   cd MCP
+   docker compose up -d mcp-inspector
+   ```
+   Abrir `http://localhost:6274` en el navegador y conectar a `http://sensorhub_mcp:8000/mcp` (dentro de Docker) o `http://localhost:8000/mcp` (si se usa `npx @modelcontextprotocol/inspector`).
+
+3. **Conexión a Clientes LLM Reales (Claude Desktop / Agentes):**
+   Agregar el servidor MCP como endpoint remoto por URL (`http://localhost:8000/mcp`) en la configuración del cliente.
+
+4. **Acceso Remoto desde Modelos en la Nube:**
+   Para conectar modelos o servicios externos sin IP pública, se puede exponer el puerto mediante un túnel:
+   ```bash
+   ngrok http 8000
+   ```
+   Y configurar en el cliente la URL pública resultante: `https://<dominio-ngrok>.ngrok-free.app/mcp`.
 
 ---
 
@@ -304,10 +405,27 @@ cd 2026-g4-sensorhub
 
 ```
 2026-g4-sensorhub/
-├── Firmware/          # Código ESP32 (ESP-IDF / C)
-├── MCP/               # Servidor FastMCP (Python)
-├── Stack/             # Docker Compose (EMQX + InfluxDB + Simuladores)
-└── README.md
+├── Firmware/                 # Código ESP32 en C (ESP-IDF)
+├── MCP/                      # Servidor FastMCP (Python)
+│   ├── sensorhub_mcp/        # Paquete modular del servidor
+│   │   ├── tools/            # Implementación de tools (climate, device_resolution)
+│   │   ├── config.py         # Carga de variables de entorno
+│   │   ├── devices.py        # Registro y matching difuso de dispositivos
+│   │   ├── influx_client.py  # Consultas Flux y agregaciones a InfluxDB
+│   │   ├── mqtt_client.py    # Cliente MQTT para mensajes retenidos
+│   │   ├── mcp_app.py        # Inicialización de FastMCP
+│   │   ├── timeutils.py      # Conversión de timestamps ISO 8601 a Flux
+│   │   └── main.py           # Entrypoint del servidor
+│   ├── devices.csv           # Registro de mapeo (living -> dht_simulado, etc.)
+│   ├── docker-compose.yml    # Despliegue de mcp-server y mcp-inspector
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── README.md             # Guía detallada de uso del componente MCP
+├── Stack/                    # Docker Compose de infraestructura
+│   ├── docker-compose.yml    # EMQX 5.8 + InfluxDB 2.7
+│   ├── simuladores-mqtt/     # Simuladores Python de DHT, PIR y Switch
+│   └── README.md             # Guía de configuración del stack y reglas SQL
+└── README.md                 # Documentación general del proyecto
 ```
 
 ---
@@ -320,7 +438,8 @@ cd 2026-g4-sensorhub
 | 🔧 [02. Tecnologías y Conceptos Clave](https://github.com/tpII/2026-g4-sensorhub/wiki/02-Tecnologias-y-Conceptos-Clave) | MCP, MQTT, EMQX e InfluxDB — fundamentos y criterios de selección |
 | 📡 [03. Contrato de Mensajería MQTT](https://github.com/tpII/2026-g4-sensorhub/wiki/03-Contrato-de-Mensajeria-MQTT) | Especificación de tópicos, payloads, QoS y estrategias por dispositivo |
 | ⚙️ [04. Infraestructura y Pipeline EMQX-InfluxDB](https://github.com/tpII/2026-g4-sensorhub/wiki/04-Infraestructura-y-Pipeline-EMQX-InfluxDB) | Stack Docker, reglas SQL y representación dual de estados |
-| 🤖 [05. Servidor MCP y LLM](https://github.com/tpII/2026-g4-sensorhub/wiki/05-Servidor-MCP-y-LLM) | FastMCP, diseño de tools y estrategia MQTT vs. InfluxDB |
+| 🤖 [05. Servidor MCP y LLM](https://github.com/tpII/2026-g4-sensorhub/wiki/05-Servidor-MCP-y-LLM) | FastMCP, transporte Streamable HTTP, arquitectura y diseño de tools |
+| 🧭 [06. Diseño de Tools MCP por Dispositivo](https://github.com/tpII/2026-g4-sensorhub/wiki/06-Diseno-de-Tools-MCP-por-Dispositivo) | Criterios normativos, catálogo por sensor/actuador y resolución en dos pasos |
 | 📓 [Bitácora de Avance Semanal](https://github.com/tpII/2026-g4-sensorhub/wiki/Bitacora) | Registro cronológico del progreso del equipo |
 
 ---
