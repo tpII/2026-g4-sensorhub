@@ -7,6 +7,7 @@
 
 ## 📋 Tabla de Contenidos
 
+- [Inicio Rápido](#-inicio-rápido)
 - [Descripción del Proyecto](#-descripción-del-proyecto)
 - [Arquitectura del Sistema](#-arquitectura-del-sistema)
 - [Principios Rectores](#-principios-rectores-de-arquitectura)
@@ -17,6 +18,50 @@
 - [Servidor MCP y LLM](#-servidor-mcp-y-llm)
 - [Obtención del Proyecto](#-obtención-del-proyecto)
 - [Documentación y Wiki](#-documentación-y-wiki)
+
+---
+
+## 🚀 Inicio Rápido
+
+> **Requisito:** tener [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y corriendo.
+
+Cloná el repositorio y ejecutá el script desde la raíz del proyecto:
+
+**Windows (PowerShell):**
+```powershell
+# Stack base (EMQX + InfluxDB + MCP + Inspector)
+.\start.ps1
+
+# Stack completo + simuladores de sensores
+.\start.ps1 -Simuladores
+
+# Detener todo
+.\start.ps1 -Detener
+```
+
+**Linux / macOS (bash):**
+```bash
+# Dar permisos la primera vez
+chmod +x start.sh
+
+# Stack base
+./start.sh
+
+# Stack completo + simuladores de sensores
+./start.sh --simuladores
+
+# Detener todo
+./start.sh --detener
+```
+
+Al finalizar el script, las interfaces estarán disponibles en:
+
+| Servicio | URL | Usuario / Contraseña |
+| :--- | :--- | :--- |
+| EMQX Dashboard | http://localhost:18083 | `admin` / `admin` |
+| InfluxDB UI | http://localhost:8086 | `admin` / `adminpassword123` |
+| MCP Inspector | http://localhost:6274 | — (conectar a `http://sensorhub_mcp:8000/mcp`) |
+| MCP API | http://localhost:8000/mcp | — |
 
 ---
 
@@ -415,6 +460,8 @@ cd 2026-g4-sensorhub
 │   ├── docker-compose.yml    # EMQX 5.8 + InfluxDB 2.7
 │   ├── simuladores-mqtt/     # Simuladores Python de DHT, PIR y Switch
 │   └── README.md             # Guía de configuración del stack y reglas SQL
+├── start.ps1                 # Script de inicio rápido para Windows (PowerShell)
+├── start.sh                  # Script de inicio rápido para Linux / macOS (bash)
 └── README.md                 # Documentación general del proyecto
 ```
 
