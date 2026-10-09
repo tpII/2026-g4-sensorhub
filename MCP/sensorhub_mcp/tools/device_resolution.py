@@ -12,8 +12,11 @@ def resolve_device_id(description: str, device_type: Optional[str] = None) -> st
     """
     Traduce una descripción en lenguaje libre de un dispositivo (por ejemplo
     "cocina", "el de la oficina") al device_id exacto que esperan las demás
-    tools. Hay que llamarla ANTES de cualquier tool de lectura o de comando,
-    y usar el valor que devuelve como argumento device_id de esa tool.
+    tools. Llamarla ANTES de cualquier tool de lectura o de comando cuando el
+    usuario nombró el dispositivo por un lugar o un apodo, y usar el valor que
+    devuelve como argumento device_id de esa tool. Si el usuario ya dio el
+    device_id (la MAC del dispositivo: 12 caracteres hexadecimales, con o sin
+    ':'), no hace falta llamarla.
 
     Si encuentra una coincidencia, el valor devuelto es el device_id en sí
     (un identificador interno) — no corresponde mostrárselo al usuario tal

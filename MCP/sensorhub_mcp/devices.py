@@ -43,6 +43,35 @@ def is_safe_device_id(device_id: str) -> bool:
     return bool(_SAFE_DEVICE_ID_PATTERN.match(device_id))
 
 
+# MAC escrita con separadores (98:3d:ae:52:98:58 o 98-3d-ae-52-98-58), ya en
+# minúsculas. Los tópicos MQTT y los tags de InfluxDB distinguen mayúsculas, y
+# el contrato fija el device_id en minúsculas y sin separadores (wiki, 03,
+# sección 1) — por eso se lleva a esa forma antes de armar tópicos o queries.
+_MAC_WITH_SEPARATORS_PATTERN = re.compile(r"^[0-9a-f]{2}([:-])[0-9a-f]{2}(\1[0-9a-f]{2}){4}$")
+
+
+def canonical_device_id(device_id: str) -> str:
+    """Lleva un device_id a la forma del contrato: minúsculas y, si es una
+    MAC con separadores, sin ellos ("98:3D:AE:52:98:58" -> "983dae529858")."""
+    text = device_id.strip().lower()
+    if _MAC_WITH_SEPARATORS_PATTERN.match(text):
+        text = text.replace(":", "").replace("-", "")
+    return text
+
+
+# Verificación de existencia que usan las tools de datos cuando reciben un
+# device_id directo (sin pasar por resolve_device_id): distingue "no existe
+# ese dispositivo" de "no hay datos" (ver wiki, 06, sección 2.3). Se valida
+# contra el registro y no contra InfluxDB o el broker porque estos solo dicen
+# si el dispositivo publicó alguna vez, no si está registrado.
+def find_registered_device(device_id: str, device_type: Optional[str] = None) -> Optional[str]:
+    canonical = canonical_device_id(device_id)
+    for entry in load_device_registry(device_type):
+        if entry["device_id"].lower() == canonical:
+            return entry["device_id"]
+    return None
+
+
 # Nunca se le pasa entero al LLM (ver wiki, 06, sección 2.3) — solo lo usa
 # resolve_device_id, server-side, para resolver una descripción puntual.
 # device_type filtra el registro antes de devolverlo (p. ej. para
@@ -72,8 +101,11 @@ def match_device_id(description: str, registry: list[dict]) -> Optional[str]:
     registro ya cargado (y, si corresponde, ya filtrado por device_type),
     o devuelve None si no hay ninguna coincidencia razonable.
     """
+    # Si la descripción ya es un device_id registrado (en cualquier forma:
+    # mayúsculas, MAC con separadores), se devuelve tal cual está registrado.
+    canonical = canonical_device_id(description)
     for entry in registry:
-        if entry["device_id"] == description.strip():
+        if entry["device_id"].lower() == canonical:
             return entry["device_id"]
 
     friendly_names = [entry["friendly_name"] for entry in registry]

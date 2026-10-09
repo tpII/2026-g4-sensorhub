@@ -3,7 +3,7 @@
 import time
 from datetime import datetime, timedelta, timezone
 
-from ..devices import is_safe_device_id
+from ..devices import canonical_device_id, find_registered_device, is_safe_device_id
 from ..influx_client import query_field_aggregate, query_latest_climate
 from ..mcp_app import mcp
 from ..mqtt_client import fetch_mqtt_retained
@@ -26,19 +26,44 @@ MQTT_STALE_AFTER_SECONDS = 30
 CLIMATE_AT_WINDOW_SECONDS = 60
 
 
+# Validación común de las tools de clima. El modelo puede pasar el device_id
+# que dio el usuario sin llamar antes a resolve_device_id, así que acá se lleva
+# a la forma canónica (minúsculas, MAC sin separadores), se valida el formato
+# (el id se interpola en tópicos y queries Flux) y se verifica que esté
+# registrado como DHT. Devuelve (device_id, None) o (None, mensaje de error).
+def _validate_dht_device_id(device_id: str):
+    canonical = canonical_device_id(device_id)
+    if not is_safe_device_id(canonical):
+        return None, "El device_id no tiene un formato válido."
+    registered = find_registered_device(canonical, "dht")
+    if registered is None:
+        return None, (
+            f"'{device_id}' no corresponde a ningún sensor DHT registrado. Si el usuario "
+            "nombró el dispositivo por un lugar o un apodo, obtener primero el device_id "
+            "con resolve_device_id."
+        )
+    return registered, None
+
+
 @mcp.tool()
 def get_current_climate(device_id: str) -> str:
     """
     Obtiene la temperatura y la humedad actuales de un sensor DHT, con la
-    hora de la lectura. Llamar primero a resolve_device_id si el usuario no
-    dio el device_id exacto.
+    hora de la lectura.
+
+    Si el usuario dio el device_id del sensor, usarlo directamente: es la
+    dirección MAC del dispositivo, 12 caracteres hexadecimales con o sin ':'
+    (por ejemplo 983dae529858); los simulados usan ids como dht_simulado.
+    Si nombró el sensor por un lugar o un apodo ("el living"), llamar
+    primero a resolve_device_id.
 
     Args:
-        device_id: Identificador exacto del sensor DHT (resuelto previamente
-            con resolve_device_id si hace falta).
+        device_id: device_id del sensor DHT, dado por el usuario o devuelto
+            por resolve_device_id. No acepta nombres de lugares.
     """
-    if not is_safe_device_id(device_id):
-        return "El device_id no tiene un formato válido."
+    device_id, error = _validate_dht_device_id(device_id)
+    if error:
+        return error
 
     retained = fetch_mqtt_retained(f"sensorhub/dht/{device_id}/telemetry")
     if retained is not None and "temperature" in retained and "humidity" in retained and "ts" in retained:
@@ -75,17 +100,20 @@ def get_climate_at(device_id: str, timestamp: str) -> str:
     """
     Obtiene la temperatura y humedad que estaban vigentes en un momento
     puntual del pasado, buscando la última lectura registrada hasta ese
-    instante. Llamar primero a resolve_device_id si el usuario no dio el
-    device_id exacto.
+    instante. Si el usuario nombró el sensor por un lugar o un apodo, llamar
+    primero a resolve_device_id; si dio su device_id (MAC de 12 caracteres
+    hexadecimales), usarlo directamente.
 
     Args:
-        device_id: Identificador exacto del sensor DHT.
+        device_id: device_id del sensor DHT, dado por el usuario o devuelto
+            por resolve_device_id. No acepta nombres de lugares.
         timestamp: Instante consultado, en formato ISO 8601 (por ejemplo
             '2026-10-02T15:00:00Z'). Si el usuario dio una hora en lenguaje
             natural, convertirla a este formato antes de llamar a la tool.
     """
-    if not is_safe_device_id(device_id):
-        return "El device_id no tiene un formato válido."
+    device_id, error = _validate_dht_device_id(device_id)
+    if error:
+        return error
 
     try:
         moment = parse_iso8601(timestamp)
@@ -125,16 +153,19 @@ def get_climate_trend(device_id: str, start: str, end: str) -> str:
     """
     Resume cómo varió la temperatura y la humedad de un sensor DHT entre dos
     instantes (mínimo, máximo y promedio) — no devuelve la serie completa,
-    sino un resumen en lenguaje natural de la tendencia. Llamar primero a
-    resolve_device_id si el usuario no dio el device_id exacto.
+    sino un resumen en lenguaje natural de la tendencia. Si el usuario nombró
+    el sensor por un lugar o un apodo, llamar primero a resolve_device_id; si
+    dio su device_id (MAC de 12 caracteres hexadecimales), usarlo directamente.
 
     Args:
-        device_id: Identificador exacto del sensor DHT.
+        device_id: device_id del sensor DHT, dado por el usuario o devuelto
+            por resolve_device_id. No acepta nombres de lugares.
         start: Inicio del rango, en formato ISO 8601 (ej. '2026-10-02T10:00:00Z').
         end: Fin del rango, en formato ISO 8601 (ej. '2026-10-02T18:00:00Z').
     """
-    if not is_safe_device_id(device_id):
-        return "El device_id no tiene un formato válido."
+    device_id, error = _validate_dht_device_id(device_id)
+    if error:
+        return error
 
     try:
         start_dt = parse_iso8601(start)

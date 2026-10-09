@@ -280,6 +280,7 @@ Siguiendo las definiciones de la **Wiki 06 ([Diseño de Tools MCP por Dispositiv
      1. Invoca `resolve_device_id(description, device_type)` para traducir la descripción al `device_id` canónico. El LLM extrae la descripción del mensaje del usuario; el servidor la normaliza (minúsculas, sin artículos ni preposiciones) y la compara con búsqueda difusa (`difflib`, umbral 0,8) sobre `devices.csv`. Ver Wiki 06, sección 2.4.
      2. Llama a la tool de datos correspondiente utilizando dicho `device_id`.
    - Si no hay coincidencia certera, la tool prefiere solicitar aclaración antes de devolver un dispositivo erróneo.
+   - Si el usuario da el `device_id` (la MAC del dispositivo), el LLM puede saltear `resolve_device_id` y llamar directo a la tool de datos. El servidor lleva el id a su forma canónica (minúsculas, sin separadores) y verifica que esté registrado en `devices.csv`; si no lo está, responde que no corresponde a ningún dispositivo en vez de "no hay datos". Ver Wiki 06, sección 2.5.
 
 5. **Detección de Datos Desactualizados (*Stale Data*):**
    - Dado que los mensajes MQTT retenidos no expiran automáticamente, si el `ts` del payload retenido supera un umbral de obsolescencia (`MQTT_STALE_AFTER_SECONDS = 30`), la tool advierte explícitamente que el sensor podría estar desconectado.
