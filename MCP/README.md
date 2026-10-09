@@ -14,13 +14,14 @@ MCP/
 ├── requirements.txt
 └── sensorhub_mcp/          # El paquete Python del servidor
     ├── config.py            # Variables de entorno
-    ├── mcp_app.py            # Instancia de FastMCP
+    ├── mcp_app.py            # Instancia de FastMCP: lifespan, seguridad HTTP, instrucciones, logging
+    ├── resources.py          # Resource sensorhub://device-types
     ├── mqtt_client.py        # Lectura de mensajes retenidos por MQTT
     ├── influx_client.py      # Consultas Flux a InfluxDB
     ├── devices.py            # Registro y resolución de device_id
-    ├── timeutils.py          # Parseo de fechas ISO 8601
+    ├── timeutils.py          # Zona horaria y formato de fechas para Flux
     ├── main.py / __main__.py # Punto de entrada
-    └── tools/                 # Las tools expuestas al LLM
+    └── tools/                 # Las tools expuestas al LLM (common.py: tipos y helpers compartidos)
 ```
 
 `devices.csv` ya trae los tres dispositivos simulados por defecto:
@@ -69,21 +70,32 @@ En ambos casos, el servidor queda escuchando en `http://<MCP_HOST>:<MCP_PORT><MC
 
 ## Cómo probarlo
 
-### 1. Llamando a las tools directamente en Python (sin protocolo MCP de por medio)
+### 1. Con un cliente MCP mínimo en Python
 
-El chequeo más rápido para aislar si el problema es de lógica propia o del protocolo/transporte. Las funciones son Python normal, se pueden importar y llamar sin levantar el servidor:
+Las tools son funciones asíncronas que reciben el contexto del servidor (cliente de InfluxDB compartido, sesión del cliente), así que se prueban a través del protocolo, con el cliente oficial del SDK (`pip install mcp`). Con el servidor levantado:
 
-```bash
-cd MCP
-python3 -c "
-from sensorhub_mcp.tools.device_resolution import resolve_device_id
-from sensorhub_mcp.tools.climate import get_current_climate
+```python
+import asyncio
 
-device_id = resolve_device_id('living')
-print(device_id)
-print(get_current_climate(device_id))
-"
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+
+async def main():
+    async with streamablehttp_client("http://localhost:8000/mcp") as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            print([tool.name for tool in (await session.list_tools()).tools])
+            result = await session.call_tool("resolve_device_id", {"description": "living"})
+            device_id = result.content[0].text
+            result = await session.call_tool("get_current_climate", {"device_id": device_id})
+            print(result.content[0].text)
+
+
+asyncio.run(main())
 ```
+
+Los errores (dispositivo no registrado, fecha inválida, InfluxDB caído) llegan con `result.isError == True`.
 
 ### 2. Con el MCP Inspector (recomendado para probar las tools como las vería un LLM, sin necesitar un modelo)
 
@@ -96,7 +108,7 @@ docker compose up -d mcp-inspector
 
 Abri `http://localhost:6274` en el navegador. Como corre en la misma red que `mcp-server`, para conectarlo hay que usar el nombre del contenedor, no `localhost`: **`http://sensorhub_mcp:8000/mcp`**.
 
-> La autenticación de la UI viene deshabilitada (`DANGEROUSLY_OMIT_AUTH`) a propósito, para no tener que copiar un token cada vez en desarrollo local. **No exponer este puerto con ngrok publicar en otra interfaz** sin volver a habilitar la autenticación — a diferencia del servidor MCP solo, el Inspector es una UI pensada para invocar tools con un click, así que sin token cualquiera que llegue al puerto puede operar los dispositivos.
+> La autenticación de la UI viene deshabilitada (`DANGEROUSLY_OMIT_AUTH`) a propósito, para no tener que copiar un token cada vez en desarrollo local. **No exponer este puerto con ngrok ni publicarlo en otra interfaz** sin volver a habilitar la autenticación — a diferencia del servidor MCP solo, el Inspector es una UI pensada para invocar tools con un click, así que sin token cualquiera que llegue al puerto puede operar los dispositivos.
 
 **Opción B — suelto, sin Docker:**
 
@@ -121,5 +133,7 @@ ngrok http 8000
 ```
 
 Eso da una URL pública (`https://<algo>.ngrok-free.app`). Del lado del cliente externo, se configura el servidor remoto como `https://<algo>.ngrok-free.app/mcp` — tal cual, cambiando solo el host.
+
+El servidor valida los encabezados `Host` y `Origin` (protección contra *DNS rebinding*), así que antes hay que agregar ese dominio en `.env`: `MCP_ALLOWED_HOSTS=...,<algo>.ngrok-free.app` y `MCP_ALLOWED_ORIGINS=...,https://<algo>.ngrok-free.app`. Si no, el servidor responde 421 o 403.
 
 **Antes de hacerlo:** las credenciales que usa el servidor (token de InfluxDB, etc.) son las de desarrollo documentadas en [`../Stack/README.md`](../Stack/README.md) — no son secretas, pero tampoco hay que dejar el túnel abierto más tiempo del que dura la prueba, porque cualquiera con la URL puede invocar las tools (incluida `set_switch_state`, el día que exista) mientras el túnel esté activo.

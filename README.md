@@ -330,16 +330,28 @@ Siguiendo las definiciones de la **Wiki 06 ([Diseño de Tools MCP por Dispositiv
 5. **Detección de Datos Desactualizados (*Stale Data*):**
    - Dado que los mensajes MQTT retenidos no expiran automáticamente, si el `ts` del payload retenido supera un umbral de obsolescencia (`MQTT_STALE_AFTER_SECONDS = 30`), la tool advierte explícitamente que el sensor podría estar desconectado.
 
+6. **Uso de las primitivas y mecanismos del estándar MCP:**
+   - **Esquemas de parámetros:** cada parámetro se declara con `Annotated[..., Field(description=...)]`, de modo que su descripción y sus restricciones (patrón del `device_id`, `enum` de `device_type`, formato `date-time` de las fechas) viajan en el JSON Schema y el SDK rechaza argumentos inválidos antes de ejecutar la tool.
+   - **Errores con `isError`:** las fallas (dispositivo no registrado, rango inválido, InfluxDB caído) se informan con `ToolError`, que el cliente recibe como resultado con `isError: true`.
+   - **Anotaciones de tools:** todas declaran `readOnlyHint`, `idempotentHint`, `destructiveHint=false` y `openWorldHint=false`.
+   - **Tools asíncronas:** el I/O bloqueante (MQTT, InfluxDB) corre en un hilo aparte, así una consulta lenta no frena al resto de los clientes.
+   - **Lifespan:** el cliente de InfluxDB se crea al arrancar el servidor y se cierra al apagarlo.
+   - **Resource `sensorhub://device-types`:** catálogo de tipos de dispositivo como contexto de solo lectura.
+   - **Instructions:** guía general para el modelo, entregada al conectarse.
+   - **Elicitation:** si `resolve_device_id` no identifica el dispositivo y el cliente lo soporta, le pide al usuario que elija entre los registrados.
+   - **Logging por el protocolo:** capacidad `logging` declarada y nivel configurable por sesión (`logging/setLevel`).
+   - **Seguridad y escalado:** validación de `Host`/`Origin` contra *DNS rebinding* (`MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS`) y modo `MCP_STATELESS_HTTP` opcional para correr varias réplicas (sin elicitation).
+
 ---
 
 ### Catálogo de Tools Implementadas
 
 | Tool | Argumentos | Fuente / Estrategia | Descripción |
 | :--- | :--- | :--- | :--- |
-| `resolve_device_id` | `description: str`, `device_type: Optional[str]` | Registro local (`devices.csv`) + `difflib` | Traduce lenguaje libre al `device_id` canónico exacto. |
+| `resolve_device_id` | `description: str`, `device_type: "dht" \| "pir" \| "switch"` (opcional) | Registro local (`devices.csv`) + `difflib` | Traduce lenguaje libre al `device_id` canónico exacto. |
 | `get_current_climate` | `device_id: str` | MQTT (`retain=true`) con fallback a InfluxDB `last()` | Retorna temperatura y humedad actuales con marca de tiempo UTC. |
-| `get_climate_at` | `device_id: str`, `timestamp: str` (ISO 8601) | InfluxDB v2 (última lectura en los 60 s previos al instante) | Recupera la lectura climática vigente en un momento puntual del pasado. |
-| `get_climate_trend` | `device_id: str`, `start: str`, `end: str` | InfluxDB v2 (agregaciones `min`, `max`, `mean`) | Resume la variación climática en lenguaje natural en un rango de tiempo. |
+| `get_climate_at` | `device_id: str`, `timestamp: datetime` (ISO 8601) | InfluxDB v2 (última lectura en los 60 s previos al instante) | Recupera la lectura climática vigente en un momento puntual del pasado. |
+| `get_climate_trend` | `device_id: str`, `start: datetime`, `end: datetime` | InfluxDB v2 (agregaciones `min`, `max`, `mean`) | Resume la variación climática en lenguaje natural en un rango de tiempo. |
 
 #### Roadmap de Tools por Dispositivo (según Wiki 06)
 
@@ -404,11 +416,7 @@ El servidor quedará disponible en `http://localhost:8000/mcp`.
 
 ### Pruebas y Validación
 
-1. **Llamadas directas en Python (sin transporte de red):**
-   ```bash
-   cd MCP
-   python -c "from sensorhub_mcp.tools.device_resolution import resolve_device_id; from sensorhub_mcp.tools.climate import get_current_climate; id = resolve_device_id('living'); print('Device ID:', id); print(get_current_climate(id))"
-   ```
+1. **Cliente MCP mínimo en Python:** las tools son asíncronas y reciben el contexto del servidor, así que se prueban a través del protocolo con el cliente oficial del SDK (`pip install mcp`). El ejemplo completo está en [`MCP/README.md`](MCP/README.md#1-con-un-cliente-mcp-mínimo-en-python); los errores llegan con `isError == True`.
 
 2. **MCP Inspector (interfaz gráfica para depurar tools):**
    ```bash
@@ -443,12 +451,13 @@ cd 2026-g4-sensorhub
 ├── Firmware/                 # Código ESP32 en C (ESP-IDF) — pendiente, aún sin contenido
 ├── MCP/                      # Servidor FastMCP (Python)
 │   ├── sensorhub_mcp/        # Paquete modular del servidor
-│   │   ├── tools/            # Implementación de tools (climate, device_resolution)
+│   │   ├── tools/            # Implementación de tools (climate, device_resolution, common)
+│   │   ├── resources.py      # Resource sensorhub://device-types
 │   │   ├── config.py         # Carga de variables de entorno
 │   │   ├── devices.py        # Registro y matching difuso de dispositivos
 │   │   ├── influx_client.py  # Consultas Flux y agregaciones a InfluxDB
 │   │   ├── mqtt_client.py    # Cliente MQTT para mensajes retenidos
-│   │   ├── mcp_app.py        # Inicialización de FastMCP
+│   │   ├── mcp_app.py        # FastMCP: lifespan, seguridad HTTP, instrucciones, logging
 │   │   ├── timeutils.py      # Conversión de timestamps ISO 8601 a Flux
 │   │   └── main.py           # Entrypoint del servidor
 │   ├── devices.csv           # Registro de mapeo (living -> dht_simulado, etc.)

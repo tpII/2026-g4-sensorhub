@@ -1,15 +1,29 @@
 """Punto de entrada del servidor MCP."""
 
-from . import tools  # noqa: F401  (registra las tools al importar el paquete)
-from .config import INFLUXDB_BUCKET, INFLUXDB_ORG, INFLUXDB_URL, MCP_HOST, MCP_PORT, MQTT_BROKER_HOST, MQTT_BROKER_PORT
+import logging
+
+from . import resources, tools  # noqa: F401  (registran resources y tools al importarse)
+from .config import (
+    INFLUXDB_BUCKET,
+    INFLUXDB_ORG,
+    INFLUXDB_URL,
+    MCP_HOST,
+    MCP_PORT,
+    MCP_STATELESS_HTTP,
+    MQTT_BROKER_HOST,
+    MQTT_BROKER_PORT,
+)
 from .mcp_app import mcp
+
+logger = logging.getLogger("sensorhub_mcp")
 
 
 def main() -> None:
-    print("Iniciando Servidor MCP SensorHub en modo Streamable HTTP...")
-    print(f"Broker MQTT : {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT} (listo para uso)")
-    print(f"InfluxDB    : {INFLUXDB_URL} (Org: {INFLUXDB_ORG}, Bucket: {INFLUXDB_BUCKET})")
-    print(f"Endpoint    : http://{MCP_HOST}:{MCP_PORT}{mcp.settings.streamable_http_path}")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logger.info("Iniciando servidor MCP SensorHub (Streamable HTTP, %s)", "stateless" if MCP_STATELESS_HTTP else "con sesión")
+    logger.info("Broker MQTT: %s:%s", MQTT_BROKER_HOST, MQTT_BROKER_PORT)
+    logger.info("InfluxDB: %s (org %s, bucket %s)", INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET)
+    logger.info("Endpoint: http://%s:%s%s", MCP_HOST, MCP_PORT, mcp.settings.streamable_http_path)
 
     mcp.run(transport="streamable-http")
 

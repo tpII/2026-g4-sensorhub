@@ -1,6 +1,7 @@
 """Cliente MQTT y lectura de mensajes retenidos."""
 
 import json
+import logging
 import os
 import threading
 from typing import Optional
@@ -8,6 +9,8 @@ from typing import Optional
 import paho.mqtt.client as mqtt
 
 from .config import MQTT_BROKER_HOST, MQTT_BROKER_PORT
+
+logger = logging.getLogger(__name__)
 
 # Cuánto esperar la entrega del mensaje retenido al suscribirse antes de
 # asumir que no hay nada publicado todavía en ese tópico y caer a InfluxDB.
@@ -18,6 +21,8 @@ def get_mqtt_client(client_id: str = "mcp_client") -> mqtt.Client:
     return mqtt.Client(client_id=client_id)
 
 
+# Función síncrona y bloqueante (espera hasta `timeout`): las tools la
+# ejecutan en un hilo aparte para no bloquear el servidor.
 # Lee el mensaje retenido de un tópico suscribiéndose en el momento de la
 # llamada, en vez de mantener una suscripción/caché de fondo. Como el
 # tópico tiene retain=true, el broker entrega el mensaje retenido (si hay
@@ -41,7 +46,7 @@ def fetch_mqtt_retained(topic: str, timeout: float = MQTT_SUBSCRIBE_TIMEOUT_SECO
     try:
         client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=10)
     except Exception as e:
-        print(f"[fetch_mqtt_retained] No se pudo conectar al broker: {e}")
+        logger.warning("No se pudo conectar al broker MQTT: %s", e)
         return None
 
     client.loop_start()

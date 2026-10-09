@@ -19,6 +19,11 @@ services:
       - MCP_HTTP_PATH=${MCP_HTTP_PATH:-/mcp}
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
+      # Modo stateless (escala horizontal; desactiva elicitation) y protección
+      # contra DNS rebinding: hosts y orígenes aceptados (ver .env.example).
+      - MCP_STATELESS_HTTP=${MCP_STATELESS_HTTP:-false}
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*,sensorhub_mcp:*}
+      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
     networks:
       - sensorhub_network
 

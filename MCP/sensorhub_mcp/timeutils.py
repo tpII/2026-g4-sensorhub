@@ -1,19 +1,17 @@
-"""Parseo y formateo de instantes de tiempo para las tools que aceptan
-fechas/horas como argumento (ISO 8601 <-> literal RFC3339 de Flux)."""
+"""Normalización de instantes de tiempo para las tools que aceptan fechas como
+argumento. El parseo de ISO 8601 lo hace el SDK de MCP (pydantic) a partir del
+tipo `datetime` de los parámetros; acá solo se fija la zona horaria y se da
+formato al literal RFC 3339 que espera Flux."""
 
 from datetime import datetime, timezone
 
 
-def parse_iso8601(value: str) -> datetime:
-    """Acepta ISO 8601 con o sin sufijo 'Z'; devuelve un datetime en UTC."""
-    text = value.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    parsed = datetime.fromisoformat(text)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+def as_utc(moment: datetime) -> datetime:
+    """Interpreta una fecha sin zona horaria como UTC y convierte el resto a UTC."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc)
 
 
 def to_flux_time(moment: datetime) -> str:
-    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return as_utc(moment).strftime("%Y-%m-%dT%H:%M:%SZ")
