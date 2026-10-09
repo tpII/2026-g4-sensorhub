@@ -52,7 +52,7 @@ flowchart TD
         sim["Simuladores MQTT<br/>(Docker)"]
     end
 
-    C1 <-->|"MCP Streamable HTTP / stdio"| C2
+    C1 <-->|"MCP Streamable HTTP"| C2
     C2 -->|"Flux Query"| C3
     C2 -.->|"MQTT Pub/Sub"| C4
     C4 -->|"HTTP Write (Line Protocol ms)"| C3
@@ -246,7 +246,7 @@ Los estados de actuadores se almacenan en InfluxDB con **doble representación**
 
 ### FastMCP y Arquitectura Modular (Python)
 
-El servidor MCP está implementado en Python utilizando la librería **FastMCP**, expuesto mediante transporte **Streamable HTTP** en el endpoint `/mcp` (puerto por defecto `8000`). Este diseño permite la comunicación desacoplada y estandarizada con clientes LLM (como Claude Desktop, Claude Code o agentes autónomos), aislando la complejidad de los protocolos IoT (MQTT y Flux/InfluxDB).
+El servidor MCP está implementado en Python con la clase **FastMCP** del SDK oficial de MCP (paquete `mcp`, `from mcp.server.fastmcp import FastMCP`; no el paquete independiente `fastmcp`), expuesto mediante transporte **Streamable HTTP** en el endpoint `/mcp` (puerto por defecto `8000`). Este diseño permite la comunicación desacoplada y estandarizada con clientes LLM (como Claude Desktop, Claude Code o agentes autónomos), aislando la complejidad de los protocolos IoT (MQTT y Flux/InfluxDB).
 
 El paquete `MCP/sensorhub_mcp/` está estructurado modularmente:
 
@@ -277,7 +277,7 @@ Siguiendo las definiciones de la **Wiki 06 ([Diseño de Tools MCP por Dispositiv
 4. **Resolución de Identidades en Dos Pasos (`resolve_device_id`):**
    - El usuario común interactúa mediante descripciones amigables (*"el sensor del living"*, *"la luz de la oficina"*).
    - El LLM realiza un encadenamiento en dos fases:
-     1. Invoca `resolve_device_id(description, device_type)` para traducir la descripción al `device_id` canónico utilizando búsqueda difusa (`difflib`) sobre `devices.csv`.
+     1. Invoca `resolve_device_id(description, device_type)` para traducir la descripción al `device_id` canónico. El LLM extrae la descripción del mensaje del usuario; el servidor la normaliza (minúsculas, sin artículos ni preposiciones) y la compara con búsqueda difusa (`difflib`, umbral 0,8) sobre `devices.csv`. Ver Wiki 06, sección 2.4.
      2. Llama a la tool de datos correspondiente utilizando dicho `device_id`.
    - Si no hay coincidencia certera, la tool prefiere solicitar aclaración antes de devolver un dispositivo erróneo.
 
@@ -292,7 +292,7 @@ Siguiendo las definiciones de la **Wiki 06 ([Diseño de Tools MCP por Dispositiv
 | :--- | :--- | :--- | :--- |
 | `resolve_device_id` | `description: str`, `device_type: Optional[str]` | Registro local (`devices.csv`) + `difflib` | Traduce lenguaje libre al `device_id` canónico exacto. |
 | `get_current_climate` | `device_id: str` | MQTT (`retain=true`) con fallback a InfluxDB `last()` | Retorna temperatura y humedad actuales con marca de tiempo UTC. |
-| `get_climate_at` | `device_id: str`, `timestamp: str` (ISO 8601) | InfluxDB v2 (ventana Flux de 2h hacia atrás) | Recupera la lectura climática vigente en un momento puntual del pasado. |
+| `get_climate_at` | `device_id: str`, `timestamp: str` (ISO 8601) | InfluxDB v2 (última lectura en los 60 s previos al instante) | Recupera la lectura climática vigente en un momento puntual del pasado. |
 | `get_climate_trend` | `device_id: str`, `start: str`, `end: str` | InfluxDB v2 (agregaciones `min`, `max`, `mean`) | Resume la variación climática en lenguaje natural en un rango de tiempo. |
 
 #### Roadmap de Tools por Dispositivo (según Wiki 06)
@@ -394,7 +394,7 @@ cd 2026-g4-sensorhub
 
 ```
 2026-g4-sensorhub/
-├── Firmware/                 # Código ESP32 en C (ESP-IDF)
+├── Firmware/                 # Código ESP32 en C (ESP-IDF) — pendiente, aún sin contenido
 ├── MCP/                      # Servidor FastMCP (Python)
 │   ├── sensorhub_mcp/        # Paquete modular del servidor
 │   │   ├── tools/            # Implementación de tools (climate, device_resolution)
