@@ -96,15 +96,14 @@ async def main():
 asyncio.run(main())
 ```
 
-La URL del servidor depende de desde dónde se conecte el cliente. El ejemplo toma el valor de la variable de entorno `MCP_URL` y, si no existe, usa `http://localhost:8000/mcp`:
+La URL del servidor depende de dónde corre. El ejemplo toma el valor de la variable de entorno `MCP_URL` y, si no existe, usa `http://localhost:8000/mcp`:
 
-| Dónde corre el cliente | URL |
+| Servidor | URL |
 |:---|:---|
-| En la misma PC que Docker | `http://localhost:8000/mcp` |
-| En otro contenedor de la red `sensorhub_network` (por ejemplo, el MCP Inspector) | `http://sensorhub_mcp:8000/mcp` |
-| En otra computadora | `http://<IP-de-la-PC>:8000/mcp`; esa dirección hay que agregarla a `MCP_ALLOWED_HOSTS` en `.env`, o el servidor responde 421 |
+| Local, en la misma PC donde corre Docker | `http://localhost:8000/mcp` (por defecto) |
+| Público, con un dominio | `https://<dominio>/mcp`, por ejemplo `MCP_URL=https://mcp.ejemplo.com/mcp python ejemplo.py`. El dominio hay que agregarlo a `MCP_ALLOWED_HOSTS` y `MCP_ALLOWED_ORIGINS` en `.env`, o el servidor responde 421 o 403 (ver «Probar desde internet») |
 
-Si se cambia `MCP_PORT` en `.env`, el puerto de la URL tiene que coincidir. Por ejemplo, desde otra computadora: `MCP_URL=http://192.168.0.10:8000/mcp python ejemplo.py`.
+Si se cambia `MCP_PORT` en `.env`, el puerto de la URL local tiene que coincidir.
 
 Los errores (dispositivo no registrado, fecha inválida, InfluxDB caído) llegan con `result.is_error == True` (en el protocolo, `isError`). `Client` negocia la revisión más nueva del protocolo (2026-07-28); los clientes de revisiones anteriores también son atendidos.
 
