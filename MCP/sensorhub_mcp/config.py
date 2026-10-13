@@ -21,10 +21,11 @@ MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8000"))
 MCP_HTTP_PATH = os.getenv("MCP_HTTP_PATH", "/mcp")
 
-# Modo stateless de Streamable HTTP: cada petición se atiende sin sesión, lo
-# que permite escalar horizontalmente (varias réplicas detrás de un balanceador).
-# Desactivado por defecto porque sin sesión el servidor no conoce las
-# capacidades del cliente y no puede usar elicitation (ver resolve_device_id).
+# Modo stateless de Streamable HTTP para clientes de revisiones del protocolo
+# anteriores a 2026-07-28 (las que usan el handshake initialize): cada petición
+# se atiende sin sesión, lo que permite escalar horizontalmente. Desactivado por
+# defecto porque, sin sesión, esos clientes no pueden recibir elicitation (ver
+# resolve_device_id). La revisión 2026-07-28 ya es sin estado y no se ve afectada.
 MCP_STATELESS_HTTP = os.getenv("MCP_STATELESS_HTTP", "false").strip().lower() in ("1", "true", "yes")
 
 

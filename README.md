@@ -83,7 +83,7 @@ El sistema opera bajo un esquema desacoplado de **5 capas**:
 flowchart TD
     C1["**Capa 1: Interfaz de Usuario / Agente**<br/>Chat LLM (Claude Desktop, agentes locales, etc.)"]
 
-    C2["**Capa 2: Servidor MCP**<br/>FastMCP (Python) · Interfaz para consultar datos y solicitar acciones sobre dispositivos"]
+    C2["**Capa 2: Servidor MCP**<br/>MCPServer, SDK oficial v2 (Python) · Interfaz para consultar datos y solicitar acciones sobre dispositivos"]
 
     C3["**Capa 3: Persistencia TSDB**<br/>InfluxDB v2 (Series temporales & API Flux)"]
 
@@ -162,7 +162,7 @@ LLM → MCP Tool (set_switch_state)
 
 | Componente | Tecnología | Rol en la Plataforma |
 | :--- | :--- | :--- |
-| **Protocolo de IA** | [Model Context Protocol (FastMCP)](https://modelcontextprotocol.io/) | Servidor MCP en Python que expone herramientas de consulta y control al LLM. Transporte Streamable HTTP. |
+| **Protocolo de IA** | [Model Context Protocol (SDK oficial de Python, v2)](https://modelcontextprotocol.io/) | Servidor MCP en Python que expone herramientas de consulta y control al LLM. Transporte Streamable HTTP. |
 | **Broker MQTT** | [EMQX 5](https://www.emqx.io/) | Ingesta de mensajería de alta concurrencia y motor de reglas SQL *stateless* que escribe directamente en InfluxDB. |
 | **Base de Datos** | [InfluxDB v2](https://www.influxdata.com/) | Almacenamiento optimizado de métricas y eventos en series temporales con lenguaje de consulta Flux. |
 | **Microcontroladores** | [ESP32 (ESP-IDF)](https://www.espressif.com/) | Nodos embebidos en C para captura de sensores y control de hardware con LWT y timestamp de origen. |
@@ -289,13 +289,13 @@ Los estados de actuadores se almacenan en InfluxDB con **doble representación**
 
 ## 🤖 Servidor MCP y LLM
 
-### FastMCP y Arquitectura Modular (Python)
+### SDK oficial de MCP (v2) y Arquitectura Modular (Python)
 
-El servidor MCP está implementado en Python con la clase **FastMCP** del SDK oficial de MCP (paquete `mcp`, `from mcp.server.fastmcp import FastMCP`; no el paquete independiente `fastmcp`), expuesto mediante transporte **Streamable HTTP** en el endpoint `/mcp` (puerto por defecto `8000`). Este diseño permite la comunicación desacoplada y estandarizada con clientes LLM (como Claude Desktop, Claude Code o agentes autónomos), aislando la complejidad de los protocolos IoT (MQTT y Flux/InfluxDB).
+El servidor MCP está implementado en Python con la clase **`MCPServer`** del SDK oficial de MCP, versión 2 (paquete `mcp`, `from mcp.server.mcpserver import MCPServer`; en la versión 1 esa clase se llamaba `FastMCP`, y no tiene relación con el paquete independiente `fastmcp` de gofastmcp.com), expuesto mediante transporte **Streamable HTTP** en el endpoint `/mcp` (puerto por defecto `8000`). Este diseño permite la comunicación desacoplada y estandarizada con clientes LLM (como Claude Desktop, Claude Code o agentes autónomos), aislando la complejidad de los protocolos IoT (MQTT y Flux/InfluxDB).
 
 El paquete `MCP/sensorhub_mcp/` está estructurado modularmente:
 
-- `mcp_app.py`: Instancia y configuración del servidor FastMCP.
+- `mcp_app.py`: Instancia y configuración del servidor (`MCPServer`) y opciones del transporte.
 - `mqtt_client.py`: Cliente MQTT ligero para lectura directa de mensajes retenidos (`retain=true`) con baja latencia.
 - `influx_client.py`: Cliente de InfluxDB v2 para consultas analíticas y agregaciones temporales con Flux.
 - `devices.py`: Carga y gestión del registro de dispositivos (`devices.csv`), con soporte de búsqueda aproximada y validación de seguridad de IDs.
@@ -338,9 +338,9 @@ Siguiendo las definiciones de la **Wiki 06 ([Diseño de Tools MCP por Dispositiv
    - **Lifespan:** el cliente de InfluxDB se crea al arrancar el servidor y se cierra al apagarlo.
    - **Resource `sensorhub://device-types`:** catálogo de tipos de dispositivo como contexto de solo lectura.
    - **Instructions:** guía general para el modelo, entregada al conectarse.
-   - **Elicitation:** si `resolve_device_id` no identifica el dispositivo y el cliente lo soporta, le pide al usuario que elija entre los registrados.
-   - **Logging por el protocolo:** capacidad `logging` declarada y nivel configurable por sesión (`logging/setLevel`).
-   - **Seguridad y escalado:** validación de `Host`/`Origin` contra *DNS rebinding* (`MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS`) y modo `MCP_STATELESS_HTTP` opcional para correr varias réplicas (sin elicitation).
+   - **Elicitation con resolvers (`Resolve` + `Elicit`):** si `resolve_device_id` no identifica el dispositivo y el cliente lo soporta, le pide al usuario que elija entre los registrados. El SDK usa el patrón *multi round-trip* (`InputRequiredResult`) con clientes de la revisión 2026-07-28 y una solicitud `elicitation/create` con los anteriores.
+   - **Registros a `stderr`:** la revisión 2026-07-28 de la especificación declara obsoleto el *logging* por el protocolo (SEP-2577) y recomienda `stderr` u OpenTelemetry; el servidor usa el módulo `logging` de Python (visible con `docker logs`).
+   - **Seguridad y escalado:** validación de `Host`/`Origin` contra *DNS rebinding* (`MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS`) y modo `MCP_STATELESS_HTTP` opcional para correr varias réplicas (afecta solo a clientes de revisiones anteriores a 2026-07-28, que en ese modo no reciben elicitation).
 
 ---
 
@@ -449,7 +449,7 @@ cd 2026-g4-sensorhub
 ```
 2026-g4-sensorhub/
 ├── Firmware/                 # Código ESP32 en C (ESP-IDF) — pendiente, aún sin contenido
-├── MCP/                      # Servidor FastMCP (Python)
+├── MCP/                      # Servidor MCP (Python, SDK oficial v2)
 │   ├── sensorhub_mcp/        # Paquete modular del servidor
 │   │   ├── tools/            # Implementación de tools (climate, device_resolution, common)
 │   │   ├── resources.py      # Resource sensorhub://device-types
@@ -457,7 +457,7 @@ cd 2026-g4-sensorhub
 │   │   ├── devices.py        # Registro y matching difuso de dispositivos
 │   │   ├── influx_client.py  # Consultas Flux y agregaciones a InfluxDB
 │   │   ├── mqtt_client.py    # Cliente MQTT para mensajes retenidos
-│   │   ├── mcp_app.py        # FastMCP: lifespan, seguridad HTTP, instrucciones, logging
+│   │   ├── mcp_app.py        # MCPServer: lifespan, instrucciones, transporte y seguridad HTTP
 │   │   ├── timeutils.py      # Conversión de timestamps ISO 8601 a Flux
 │   │   └── main.py           # Entrypoint del servidor
 │   ├── devices.csv           # Registro de mapeo (living -> dht_simulado, etc.)
@@ -484,7 +484,7 @@ cd 2026-g4-sensorhub
 | 🔧 [02. Tecnologías y Conceptos Clave](https://github.com/tpII/2026-g4-sensorhub/wiki/02-Tecnologias-y-Conceptos-Clave) | MCP, MQTT, EMQX e InfluxDB — fundamentos y criterios de selección |
 | 📡 [03. Contrato de Mensajería MQTT](https://github.com/tpII/2026-g4-sensorhub/wiki/03-Contrato-de-Mensajeria-MQTT) | Especificación de tópicos, payloads, QoS y estrategias por dispositivo |
 | ⚙️ [04. Infraestructura y Pipeline EMQX-InfluxDB](https://github.com/tpII/2026-g4-sensorhub/wiki/04-Infraestructura-y-Pipeline-EMQX-InfluxDB) | Stack Docker, reglas SQL y representación dual de estados |
-| 🤖 [05. Servidor MCP y LLM](https://github.com/tpII/2026-g4-sensorhub/wiki/05-Servidor-MCP-y-LLM) | FastMCP, transporte Streamable HTTP, arquitectura y diseño de tools |
+| 🤖 [05. Servidor MCP y LLM](https://github.com/tpII/2026-g4-sensorhub/wiki/05-Servidor-MCP-y-LLM) | SDK oficial de MCP (v2), transporte Streamable HTTP, arquitectura y diseño de tools |
 | 🧭 [06. Diseño de Tools MCP por Dispositivo](https://github.com/tpII/2026-g4-sensorhub/wiki/06-Diseno-de-Tools-MCP-por-Dispositivo) | Criterios normativos, catálogo por sensor/actuador y resolución en dos pasos |
 | 📓 [Bitácora de Avance Semanal](https://github.com/tpII/2026-g4-sensorhub/wiki/Bitacora) | Registro cronológico del progreso del equipo |
 

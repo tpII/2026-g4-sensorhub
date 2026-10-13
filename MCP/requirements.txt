@@ -1,4 +1,10 @@
-mcp>=1.2.0,<2.0.0
+# SDK oficial de MCP, línea 2.x (clase MCPServer). La v1 usaba FastMCP en
+# mcp.server.fastmcp; ver wiki, página 05, sección 3.
+mcp>=2.3.0,<3.0.0
+# Importados directamente por el código (tools/common.py y las tools); el SDK
+# también los instala, pero se declaran para no depender de eso.
+anyio>=4.9
+pydantic>=2.12
 paho-mqtt>=1.6.1,<2.0.0
 influxdb-client>=1.36.0
 python-dotenv>=1.0.0

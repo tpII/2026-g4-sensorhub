@@ -14,7 +14,7 @@ MCP/
 ├── requirements.txt
 └── sensorhub_mcp/          # El paquete Python del servidor
     ├── config.py            # Variables de entorno
-    ├── mcp_app.py            # Instancia de FastMCP: lifespan, seguridad HTTP, instrucciones, logging
+    ├── mcp_app.py            # Instancia de MCPServer: lifespan, instrucciones, opciones de transporte y seguridad HTTP
     ├── resources.py          # Resource sensorhub://device-types
     ├── mqtt_client.py        # Lectura de mensajes retenidos por MQTT
     ├── influx_client.py      # Consultas Flux a InfluxDB
@@ -72,30 +72,41 @@ En ambos casos, el servidor queda escuchando en `http://<MCP_HOST>:<MCP_PORT><MC
 
 ### 1. Con un cliente MCP mínimo en Python
 
-Las tools son funciones asíncronas que reciben el contexto del servidor (cliente de InfluxDB compartido, sesión del cliente), así que se prueban a través del protocolo, con el cliente oficial del SDK (`pip install mcp`). Con el servidor levantado:
+Las tools son funciones asíncronas que reciben el contexto del servidor (cliente de InfluxDB compartido, sesión del cliente), así que se prueban a través del protocolo, con el cliente oficial del SDK, versión 2 (`pip install "mcp>=2.3,<3"`). Con el servidor levantado:
 
 ```python
 import asyncio
+import os
 
-from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.client import Client
+
+# La URL depende de desde dónde corre el cliente (ver la tabla de abajo).
+MCP_URL = os.getenv("MCP_URL", "http://localhost:8000/mcp")
 
 
 async def main():
-    async with streamablehttp_client("http://localhost:8000/mcp") as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            print([tool.name for tool in (await session.list_tools()).tools])
-            result = await session.call_tool("resolve_device_id", {"description": "living"})
-            device_id = result.content[0].text
-            result = await session.call_tool("get_current_climate", {"device_id": device_id})
-            print(result.content[0].text)
+    async with Client(MCP_URL) as client:
+        print([tool.name for tool in (await client.list_tools()).tools])
+        result = await client.call_tool("resolve_device_id", {"description": "living"})
+        device_id = result.content[0].text
+        result = await client.call_tool("get_current_climate", {"device_id": device_id})
+        print(result.content[0].text)
 
 
 asyncio.run(main())
 ```
 
-Los errores (dispositivo no registrado, fecha inválida, InfluxDB caído) llegan con `result.isError == True`.
+La URL del servidor depende de desde dónde se conecte el cliente. El ejemplo toma el valor de la variable de entorno `MCP_URL` y, si no existe, usa `http://localhost:8000/mcp`:
+
+| Dónde corre el cliente | URL |
+|:---|:---|
+| En la misma PC que Docker | `http://localhost:8000/mcp` |
+| En otro contenedor de la red `sensorhub_network` (por ejemplo, el MCP Inspector) | `http://sensorhub_mcp:8000/mcp` |
+| En otra computadora | `http://<IP-de-la-PC>:8000/mcp`; esa dirección hay que agregarla a `MCP_ALLOWED_HOSTS` en `.env`, o el servidor responde 421 |
+
+Si se cambia `MCP_PORT` en `.env`, el puerto de la URL tiene que coincidir. Por ejemplo, desde otra computadora: `MCP_URL=http://192.168.0.10:8000/mcp python ejemplo.py`.
+
+Los errores (dispositivo no registrado, fecha inválida, InfluxDB caído) llegan con `result.is_error == True` (en el protocolo, `isError`). `Client` negocia la revisión más nueva del protocolo (2026-07-28); los clientes de revisiones anteriores también son atendidos.
 
 ### 2. Con el MCP Inspector (recomendado para probar las tools como las vería un LLM, sin necesitar un modelo)
 

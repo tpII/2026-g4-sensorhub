@@ -7,13 +7,12 @@ from typing import Annotated, Any, Callable, Literal, TypeVar
 
 import anyio
 from influxdb_client import InfluxDBClient
-from mcp.server.fastmcp import Context
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver import Context
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ..devices import canonical_device_id, find_registered_device, is_safe_device_id
-from ..mcp_app import LOG_LEVELS, session_log_level
 
 T = TypeVar("T")
 
@@ -79,10 +78,3 @@ async def validate_device_id(device_id: str, device_type: DeviceType, type_label
             "el dispositivo por un lugar o un apodo, obtener primero el device_id con resolve_device_id."
         )
     return registered
-
-
-async def log(ctx: Context, level: str, message: str) -> None:
-    """Envía un log al cliente por el protocolo MCP si alcanza el nivel que ese
-    cliente pidió con logging/setLevel (por defecto, info)."""
-    if LOG_LEVELS.index(level) >= LOG_LEVELS.index(session_log_level(ctx.session)):
-        await ctx.log(level, message, logger_name="sensorhub")

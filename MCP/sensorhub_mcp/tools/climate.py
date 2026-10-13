@@ -1,18 +1,21 @@
 """Tools de clima (DHT: temperatura y humedad) — ver wiki, 06, sección 3.1."""
 
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from mcp.server.fastmcp import Context
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver import Context
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
 from ..influx_client import query_field_aggregate, query_latest_climate
 from ..mcp_app import mcp
 from ..mqtt_client import fetch_mqtt_retained
 from ..timeutils import as_utc, to_flux_time
-from .common import DeviceIdParam, influx, log, read_only, run_blocking, validate_device_id
+from .common import DeviceIdParam, influx, read_only, run_blocking, validate_device_id
+
+logger = logging.getLogger(__name__)
 
 # Cuán viejo puede ser el `ts` de un mensaje retenido por MQTT antes de
 # avisar explícitamente que puede no reflejar el estado actual del
@@ -73,11 +76,11 @@ async def get_current_climate(device_id: DeviceIdParam, ctx: Context) -> str:
             base += " Es el último dato reportado; el sensor podría estar desconectado desde entonces."
         return base
 
-    await log(ctx, "debug", f"Sin mensaje retenido para '{device_id}'; se consulta InfluxDB")
+    logger.debug("Sin mensaje retenido para %s; se consulta InfluxDB", device_id)
     try:
         temp_val, hum_val, time_str = await run_blocking(query_latest_climate, influx(ctx), device_id)
     except Exception as e:
-        await log(ctx, "error", f"Error consultando InfluxDB: {e}")
+        logger.error("Error consultando InfluxDB: %s", e)
         raise ToolError(INFLUX_UNAVAILABLE) from e
 
     if temp_val is None and hum_val is None:
@@ -113,7 +116,7 @@ async def get_climate_at(device_id: DeviceIdParam, timestamp: Timestamp, ctx: Co
             query_field_aggregate, client, "dht_telemetry", "humidity", device_id, "last", start_rfc3339, stop_rfc3339
         )
     except Exception as e:
-        await log(ctx, "error", f"Error consultando InfluxDB: {e}")
+        logger.error("Error consultando InfluxDB: %s", e)
         raise ToolError(INFLUX_UNAVAILABLE) from e
 
     moment_str = moment.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -163,7 +166,7 @@ async def get_climate_trend(
             for agg in ("min", "max", "mean")
         ]
     except Exception as e:
-        await log(ctx, "error", f"Error consultando InfluxDB: {e}")
+        logger.error("Error consultando InfluxDB: %s", e)
         raise ToolError(INFLUX_UNAVAILABLE) from e
 
     rango = f"{start_dt.strftime('%Y-%m-%d %H:%M')} y {end_dt.strftime('%Y-%m-%d %H:%M')} UTC"
