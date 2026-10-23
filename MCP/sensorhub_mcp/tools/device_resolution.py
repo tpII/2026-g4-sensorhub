@@ -7,7 +7,7 @@ from mcp.server.mcpserver import AcceptedElicitation, Context, Elicit, Elicitati
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field, create_model
 
-from ..devices import load_device_registry, match_device_id
+from ..devices import load_device_registry, match_device_candidates
 from ..mcp_app import mcp
 from .common import DeviceType, read_only, run_blocking
 
@@ -53,30 +53,40 @@ def _supports_elicitation(ctx: Context) -> bool:
     return elicitation is not None and (elicitation.form is not None or elicitation.url is None)
 
 
+NONE_OF_THESE = "Ninguno de estos"
+
+
 async def _resolve_description(description: str, device_type: Optional[str], ctx: Context) -> Any:
     """Resolver (SDK v2): se ejecuta antes que la tool. Devuelve el device_id si la
-    descripción coincide con un dispositivo registrado; si no, y el cliente
-    soporta elicitation, devuelve un pedido `Elicit` para que el usuario elija.
-    El SDK elige el transporte según el protocolo negociado: en 2026-07-28 lo
-    envía como InputRequiredResult (multi round-trip) y en revisiones
-    anteriores, como solicitud elicitation/create durante la llamada."""
+    descripción coincide con un único dispositivo registrado; si no coincide con
+    ninguno o con varios, y el cliente soporta elicitation, devuelve un pedido
+    `Elicit` para que el usuario elija (entre los candidatos, o entre todos los
+    registrados si no hubo ninguno). El SDK elige el transporte según el protocolo
+    negociado: en 2026-07-28 lo envía como InputRequiredResult (multi round-trip)
+    y en revisiones anteriores, como solicitud elicitation/create durante la llamada."""
     registry = await run_blocking(load_device_registry, device_type)
     if not registry:
         raise ToolError("No hay dispositivos registrados para esa búsqueda.")
-    device_id = match_device_id(description, registry)
-    if device_id is not None or not _supports_elicitation(ctx):
-        return device_id
+    candidates = match_device_candidates(description, registry)
+    if len(candidates) == 1 or not _supports_elicitation(ctx):
+        return candidates[0]["device_id"] if len(candidates) == 1 else None
 
-    options = _options(registry)
+    if candidates:
+        options = _options(candidates)
+        prompt = (
+            f"«{description}» coincide con más de un dispositivo. Elegir a cuál se refiere, "
+            f"o «{NONE_OF_THESE}» para volver a indicar el nombre o el device_id exacto:"
+        )
+    else:
+        options = _options(registry)
+        prompt = f"No se identificó el dispositivo «{description}». Elegir a cuál de los registrados se refiere:"
+    options = {**options, NONE_OF_THESE: ""}
     # Esquema de elicitation: un único campo con los nombres registrados como enum.
     choice = create_model(
         "DeviceChoice",
         dispositivo=(Literal[tuple(options)], Field(description="Dispositivo registrado")),
     )
-    return Elicit(
-        f"No se identificó el dispositivo «{description}». Elegir a cuál de los registrados se refiere:",
-        choice,
-    )
+    return Elicit(prompt, choice)
 
 
 @mcp.tool(annotations=read_only("Resolver dispositivo por nombre"))
@@ -98,7 +108,8 @@ async def resolve_device_id(
     (un identificador interno) — no corresponde mostrárselo al usuario tal
     cual, sino usarlo para completar la siguiente llamada. Si no encuentra
     ninguna coincidencia razonable, devuelve un error en vez de adivinar el
-    dispositivo más parecido.
+    dispositivo más parecido. Si la descripción coincide con varios, le pide
+    al usuario que elija entre los mejores (hasta 4).
     """
     # `resolution` lo completa el resolver (no es un argumento del modelo): un
     # device_id encontrado, la elección del usuario, o un rechazo/cancelación.
@@ -108,8 +119,9 @@ async def resolve_device_id(
             return data
         if data is not None:
             registry = await run_blocking(load_device_registry, device_type)
-            chosen = _options(registry).get(data.dispositivo)
-            if chosen is not None:
+            candidates = match_device_candidates(description, registry)
+            chosen = _options(candidates or registry).get(data.dispositivo)
+            if chosen:
                 return chosen
     raise ToolError(
         f"No se identificó ningún dispositivo que coincida con '{description}'. "

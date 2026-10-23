@@ -22,13 +22,15 @@ DEVICE_REGISTRY_PATH = os.getenv("DEVICE_REGISTRY_PATH", os.path.join(_MCP_ROOT_
 # Umbral de similitud para el fuzzy match de nombres amigables (0-1). El
 # default de difflib (0.6) da falsos positivos entre palabras cortas en
 # español que comparten muchas letras (p. ej. "cocina" vs "oficina" da 0.77
-# de similitud) y, como ratio() es 2*M/T (M = caracteres coincidentes, T =
-# suma de los largos), una subcadena como "cina" vs "cocina" da justo 0.8.
-# Con 0.9 se rechazan ambos casos sin perder tolerancia a errores de tipeo
-# reales ("livin"/"living" da 0.91). Ajustar si en la
+# de similitud). ratio() es 2*M/T (M = caracteres coincidentes, T = suma de
+# los largos), así que una subcadena como "cina" vs "cocina" da 0.8. Con 0.7
+# se aceptan descripciones truncadas o con typos, a costa de que varios
+# nombres lo superen: en ese caso no se adivina, se le muestran al usuario los
+# mejores (hasta DEVICE_MATCH_MAX_CANDIDATES) para que elija. Ajustar si en la
 # práctica resulta muy laxo o muy estricto — ver "Qué queda abierto" en la
 # wiki, 06, sección 4.
-DEVICE_MATCH_CUTOFF = 0.9
+DEVICE_MATCH_CUTOFF = 0.7
+DEVICE_MATCH_MAX_CANDIDATES = 4
 
 # Palabras sin valor para identificar un dispositivo (artículos/preposiciones
 # sueltos) — se descartan antes de comparar, así "el de la oficina" compara
@@ -97,30 +99,33 @@ def normalize_device_description(description: str) -> str:
     return " ".join(words) if words else description.strip().lower()
 
 
-def match_device_id(description: str, registry: list[dict]) -> Optional[str]:
+def match_device_candidates(description: str, registry: list[dict]) -> list[dict]:
     """
-    Resuelve una descripción en lenguaje libre a un device_id dentro de un
-    registro ya cargado (y, si corresponde, ya filtrado por device_type),
-    o devuelve None si no hay ninguna coincidencia razonable.
+    Devuelve las entradas del registro (ya cargado y, si corresponde, ya
+    filtrado por device_type) que coinciden con una descripción en lenguaje
+    libre, de mejor a peor: hasta DEVICE_MATCH_MAX_CANDIDATES con similitud >=
+    DEVICE_MATCH_CUTOFF, desempatando por nombre amigable en orden alfabético.
+    Lista vacía si ninguna alcanza el umbral. Una lista de un solo elemento es
+    una coincidencia inequívoca; con más, la descripción es ambigua.
     """
     # Si la descripción ya es un device_id registrado (en cualquier forma:
-    # mayúsculas, MAC con separadores), se devuelve tal cual está registrado.
+    # mayúsculas, MAC con separadores), es inequívoca.
     canonical = canonical_device_id(description)
     for entry in registry:
         if entry["device_id"].lower() == canonical:
-            return entry["device_id"]
+            return [entry]
 
-    friendly_names = [entry["friendly_name"] for entry in registry]
-    matches = difflib.get_close_matches(
-        normalize_device_description(description),
-        [name.lower() for name in friendly_names],
-        n=1,
-        cutoff=DEVICE_MATCH_CUTOFF,
-    )
-    if not matches:
-        return None
-
-    matched_entry = next(
-        entry for entry in registry if entry["friendly_name"].lower() == matches[0]
-    )
-    return matched_entry["device_id"]
+    normalized = normalize_device_description(description)
+    # Un nombre amigable exacto no es ambiguo con otros parecidos ("cocina" vs
+    # "oficina"); solo lo es si el mismo nombre está registrado para más de un tipo.
+    exact = [e for e in registry if e["friendly_name"].lower() == normalized]
+    if exact:
+        return exact[:DEVICE_MATCH_MAX_CANDIDATES]
+    scored = []
+    for entry in registry:
+        name = entry["friendly_name"].lower()
+        score = difflib.SequenceMatcher(None, normalized, name).ratio()
+        if score >= DEVICE_MATCH_CUTOFF:
+            scored.append((-score, name, entry))
+    scored.sort(key=lambda item: (item[0], item[1]))
+    return [entry for _, _, entry in scored[:DEVICE_MATCH_MAX_CANDIDATES]]
