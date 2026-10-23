@@ -22,11 +22,13 @@ DEVICE_REGISTRY_PATH = os.getenv("DEVICE_REGISTRY_PATH", os.path.join(_MCP_ROOT_
 # Umbral de similitud para el fuzzy match de nombres amigables (0-1). El
 # default de difflib (0.6) da falsos positivos entre palabras cortas en
 # español que comparten muchas letras (p. ej. "cocina" vs "oficina" da 0.77
-# de similitud) — con 0.8 ese caso se rechaza sin perder tolerancia a
-# errores de tipeo reales ("livin"/"living" da 0.91). Ajustar si en la
+# de similitud) y, como ratio() es 2*M/T (M = caracteres coincidentes, T =
+# suma de los largos), una subcadena como "cina" vs "cocina" da justo 0.8.
+# Con 0.9 se rechazan ambos casos sin perder tolerancia a errores de tipeo
+# reales ("livin"/"living" da 0.91). Ajustar si en la
 # práctica resulta muy laxo o muy estricto — ver "Qué queda abierto" en la
 # wiki, 06, sección 4.
-DEVICE_MATCH_CUTOFF = 0.8
+DEVICE_MATCH_CUTOFF = 0.9
 
 # Palabras sin valor para identificar un dispositivo (artículos/preposiciones
 # sueltos) — se descartan antes de comparar, así "el de la oficina" compara
