@@ -12,8 +12,9 @@
 static const char *TAG = "DHT_DEVICE";
 
 static void dht_task(void *pvParameters) {
-    float temp = 0.0f;
-    float hum = 0.0f;
+    // La libreria entrega los valores en decimas (ej. 234 = 23.4), sin pasar por float
+    int16_t temp_x10 = 0;
+    int16_t hum_x10 = 0;
 
 #if (CONFIG_SENSOR_TYPE == SENSOR_TYPE_DHT22)
     const dht_sensor_type_t sensor_type = DHT_TYPE_AM2301;
@@ -31,8 +32,11 @@ static void dht_task(void *pvParameters) {
     ESP_LOGI(TAG, "Iniciado servicio DHT (%s en GPIO %d)", sensor_name, CONFIG_DHT_PIN);
 
     while (1) {
-        esp_err_t err = dht_read_float_data(sensor_type, CONFIG_DHT_PIN, &hum, &temp);
+        esp_err_t err = dht_read_data(sensor_type, CONFIG_DHT_PIN, &hum_x10, &temp_x10);
         if (err == ESP_OK) {
+            // Division en double: cJSON imprime el valor limpio con un decimal (ej. 23.4)
+            double temp = temp_x10 / 10.0;
+            double hum = hum_x10 / 10.0;
             ESP_LOGI(TAG, "Lectura %s -> Temp: %.1f C, Hum: %.1f %%", sensor_name, temp, hum);
 
             // Hora de la lectura (0 si SNTP aun no sincronizo)
@@ -41,10 +45,8 @@ static void dht_task(void *pvParameters) {
             // Construye el payload JSON (métricas del sensor + ts)
             // Crea un objeto JSON vacio {}
             cJSON *root = cJSON_CreateObject();
-            // Redondea a un decimal y agrega al objeto JSON Ej 23.46 → 234.6 + 0.5 = 235.1 → 235 → 23.5
-            cJSON_AddNumberToObject(root, "temperature", (double)((int)(temp * 10.0f + (temp >= 0 ? 0.5f : -0.5f))) / 10.0);
-            // Idem para la humedad (siempre positiva, por eso solo suma 0.5)
-            cJSON_AddNumberToObject(root, "humidity", (double)((int)(hum * 10.0f + 0.5f)) / 10.0);
+            cJSON_AddNumberToObject(root, "temperature", temp);
+            cJSON_AddNumberToObject(root, "humidity", hum);
             // Sin hora valida se omite "ts" y EMQX usa la hora de llegada
             if (ts > 0) cJSON_AddNumberToObject(root, "ts", (double)ts);
 
