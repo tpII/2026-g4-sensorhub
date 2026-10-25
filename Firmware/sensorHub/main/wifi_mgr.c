@@ -7,6 +7,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 
+#if CONFIG_WIFI_MAX_TX_POWER != 0 && (CONFIG_WIFI_MAX_TX_POWER < 8 || CONFIG_WIFI_MAX_TX_POWER > 84)
+#error "CONFIG_WIFI_MAX_TX_POWER debe ser 0 (sin limite) o estar entre 8 y 84 (unidades de 0,25 dBm)"
+#endif
+
 static const char *TAG = "WIFI_MGR";
 static EventGroupHandle_t wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
@@ -53,9 +57,12 @@ esp_err_t wifi_mgr_init(void) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
-    // Algunas placas ESP32-C3 no autentican con TX power alta (antena/alimentacion).
-    // No deberia ser necesario; descomentar solo si la placa falla al autenticar.
-    // ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(44));
+#if CONFIG_WIFI_MAX_TX_POWER != 0
+    // Limite de potencia para placas que no autentican a potencia maxima (ver app_config.h).
+    // Debe llamarse despues de esp_wifi_start().
+    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(CONFIG_WIFI_MAX_TX_POWER));
+    ESP_LOGI(TAG, "Potencia de TX limitada a %.2f dBm", CONFIG_WIFI_MAX_TX_POWER * 0.25);
+#endif
 
     return ESP_OK;
 }

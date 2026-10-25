@@ -11,7 +11,9 @@
 
 static const char *TAG = "PIR_DEVICE";
 
-#define PIR_DEBOUNCE_MS 50
+// Antirrebote: la senal debe quedar estable este tiempo sin flancos para aceptarse.
+// Los PIR mantienen su salida por segundos, asi que un pulso mas corto es ruido (alimentacion, cableado).
+#define PIR_DEBOUNCE_MS 200
 
 // ISR: solo avisa a la tarea que hubo un flanco (sin logica pesada en contexto de interrupcion)
 static void IRAM_ATTR pir_isr_handler(void *arg) {
@@ -45,9 +47,9 @@ static void pir_task(void *pvParameters) {
         // Bloquea sin consumir CPU hasta un flanco (en el primer ciclo no espera, para publicar el estado inicial)
         if (last_state != -1) {
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-            // Antirrebote: espera a que la senal se estabilice y descarta flancos acumulados
-            vTaskDelay(pdMS_TO_TICKS(PIR_DEBOUNCE_MS));
-            ulTaskNotifyTake(pdTRUE, 0);
+            // Antirrebote: espera hasta que pasen PIR_DEBOUNCE_MS sin ningun flanco nuevo
+            while (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(PIR_DEBOUNCE_MS)) > 0) {
+            }
         }
 
         int current_state = gpio_get_level(CONFIG_PIR_PIN);

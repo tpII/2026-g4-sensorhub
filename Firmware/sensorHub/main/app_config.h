@@ -12,6 +12,11 @@
 #define CONFIG_WIFI_SSID                "Andy2"
 #define CONFIG_WIFI_PASS                "3CBBCEF573"
 
+// Limite de potencia de transmision WiFi, en unidades de 0,25 dBm (rango 8..84; ej: 44 = 11 dBm, 34 = 8,5 dBm).
+// 0 = sin limite (maximo del chip, ~20 dBm). Algunas placas ESP32-C3 SuperMini clon no logran
+// autenticar con la potencia maxima (log "reason=2", AUTH_EXPIRE): bajarla suele resolverlo.
+#define CONFIG_WIFI_MAX_TX_POWER        60
+
 // --- Selección de Protocolo MQTT ---
 #define PROTOCOL_MQTT                   0   // TCP: mqtt://host:1883
 #define PROTOCOL_MQTTS                  1   // SSL/TLS: mqtts://host:8883
