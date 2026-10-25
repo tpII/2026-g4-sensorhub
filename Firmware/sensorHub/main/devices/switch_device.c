@@ -63,8 +63,9 @@ static void on_switch_command(const char *topic, int topic_len, const char *data
     // Serializa el feedback a texto JSON sin espacios (reserva memoria dinamica)
     char *fb_str = cJSON_PrintUnformatted(fb);
     if (fb_str) {
-        mqtt_mgr_publish_with_flags(system_get_telemetry_topic(), fb_str, 1, 1);
-        ESP_LOGI(TAG, "Feedback enviado (retained) a [%s]: %s", system_get_telemetry_topic(), fb_str);
+        mqtt_mgr_publish_with_flags(system_get_telemetry_topic(), fb_str,
+                                    CONFIG_SWITCH_TELEMETRY_QOS, CONFIG_SWITCH_TELEMETRY_RETAIN);
+        ESP_LOGI(TAG, "Feedback enviado a [%s]: %s", system_get_telemetry_topic(), fb_str);
         cJSON_free(fb_str);
     }
     // Libera el objeto de feedback y el JSON parseado del comando
@@ -86,6 +87,6 @@ esp_err_t switch_device_start(void) {
     // Suscribe al topico de comandos del actuador
     const char *cmd_topic = system_get_command_topic();
     ESP_LOGI(TAG, "Suscribiendo actuador Switch a topico de comandos: %s", cmd_topic);
-    return mqtt_mgr_subscribe(cmd_topic, 1);
+    return mqtt_mgr_subscribe(cmd_topic, CONFIG_SWITCH_COMMAND_QOS);
 }
 

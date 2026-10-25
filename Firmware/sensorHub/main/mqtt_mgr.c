@@ -104,10 +104,6 @@ esp_err_t mqtt_mgr_init(const char *client_id) {
     return esp_mqtt_client_start(client);
 }
 
-esp_err_t mqtt_mgr_publish(const char *topic, const char *data) {
-    return mqtt_mgr_publish_with_flags(topic, data, 1, 0);
-}
-
 esp_err_t mqtt_mgr_publish_with_flags(const char *topic, const char *data, int qos, int retain) {
     if (!client || !is_connected) {
         return ESP_ERR_INVALID_STATE;

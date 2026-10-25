@@ -48,7 +48,7 @@ static void dht_task(void *pvParameters) {
 
             if (mqtt_mgr_is_connected()) {
                 // Publica el payload JSON en el topic de telemetría
-                mqtt_mgr_publish(topic, json_str);
+                mqtt_mgr_publish_with_flags(topic, json_str, CONFIG_DHT_TELEMETRY_QOS, CONFIG_DHT_TELEMETRY_RETAIN);
                 ESP_LOGI(TAG, "Publicado en [%s]: %s", topic, json_str);
             } else {
                 ESP_LOGW(TAG, "MQTT desconectado. Lectura omitida de envio.");

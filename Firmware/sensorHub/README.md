@@ -61,6 +61,8 @@ Encapsula los parámetros físicos y de muestreo del sensor de temperatura y hum
 | **`CONFIG_DHT_PIN`** | `GPIO_NUM_X` | Pin de datos con pull-up interno.<br>• Auto-configurado en `GPIO_NUM_3` para ESP32-C3 SuperMini.<br>• Auto-configurado en `GPIO_NUM_4` para ESP32 clásico / S2 / S3. |
 | **`CONFIG_SENSOR_TYPE`** | `SENSOR_TYPE_DHT11`<br>`SENSOR_TYPE_DHT22` | Modelo de sensor conectado (DHT11 vs DHT22 / AM2301 / AM2302). |
 | **`CONFIG_SAMPLE_INTERVAL_MS`** | Milisegundos (default: `10000`) | Intervalo de tiempo entre lecturas y publicaciones MQTT. |
+| **`CONFIG_DHT_TELEMETRY_QOS`** | `0`, `1` o `2` (default: `1`) | QoS de la publicación en `telemetry`. |
+| **`CONFIG_DHT_TELEMETRY_RETAIN`** | `1` o `0` (default: `1`) | Retain de `telemetry`: un nuevo suscriptor recibe la última lectura sin esperar el próximo ciclo. |
 
 ---
 
@@ -72,6 +74,8 @@ Encapsula los parámetros del detector de presencia por infrarrojo pasivo.
 | :--- | :--- | :--- |
 | **`CONFIG_PIR_PIN`** | `GPIO_NUM_X` (default: `GPIO_NUM_5`) | Pin de entrada conectado a la salida del sensor PIR. |
 | **`CONFIG_PIR_ACTIVE_LEVEL`** | `1` o `0` | Lógica activa de detección:<br>• `1` (Active-High): Detecta movimiento cuando la señal pasa a ALTO (3.3V) — caso común de HC-SR501 y AM312. Configura pull-down interno.<br>• `0` (Active-Low): Detecta movimiento en nivel BAJO (0V). Configura pull-up interno. |
+| **`CONFIG_PIR_TELEMETRY_QOS`** | `0`, `1` o `2` (default: `1`) | QoS de la publicación en `telemetry`. |
+| **`CONFIG_PIR_TELEMETRY_RETAIN`** | `1` o `0` (default: `0`) | Retain de `telemetry`. Sin retain: los eventos de movimiento son esporádicos y time-sensitive. |
 
 ---
 
@@ -83,6 +87,11 @@ Encapsula los parámetros del dispositivo de salida / conmutación.
 | :--- | :--- | :--- |
 | **`CONFIG_SWITCH_PIN`** | `GPIO_NUM_X` | Pin de salida conectado al switch o bobina del relé.<br>• `GPIO_NUM_8` para el LED integrado en el ESP32-C3 SuperMini.<br>• `GPIO_NUM_2` para el LED integrado en placas ESP32 DevKit. |
 | **`CONFIG_SWITCH_ACTIVE_LEVEL`** | `1` o `0` | Nivel lógico de encendido:<br>• `0` (Active-Low): Nivel 0V enciende el actuador (común en ESP32-C3 SuperMini GPIO 8 y módulos de relé optoacoplados).<br>• `1` (Active-High): Nivel 3.3V enciende el actuador (común en ESP32 DevKit GPIO 2). |
+| **`CONFIG_SWITCH_TELEMETRY_QOS`** | `0`, `1` o `2` (default: `1`) | QoS del feedback de estado en `telemetry`. |
+| **`CONFIG_SWITCH_TELEMETRY_RETAIN`** | `1` o `0` (default: `1`) | Retain del feedback: el último estado confirmado queda disponible para cualquier suscriptor. |
+| **`CONFIG_SWITCH_COMMAND_QOS`** | `0`, `1` o `2` (default: `1`) | QoS de la suscripción a `command`. Los comandos `on`/`off` son idempotentes, así que QoS 1 alcanza. |
+
+> Los valores de QoS y retain de cada device siguen el catálogo de la wiki 03 (Contrato de Mensajería MQTT). El canal `status` (LWT y presencia online) es común a todos los devices y está fijo en `mqtt_mgr.c` con QoS 1 y retain.
 
 ---
 
@@ -102,7 +111,7 @@ Los tópicos se construyen automáticamente en tiempo de ejecución con la fórm
 
 | Dispositivo (`device_type`) | Canal | Tópico Completo | Acción / Disparo | Payload JSON Exacto |
 | :--- | :--- | :--- | :--- | :--- |
-| **`dht`** | `telemetry` | `sensorhub/dht/<id>/telemetry` | Publicación periódica (cada 10s) | `{"temperature":20.0,"humidity":46.0}` |
+| **`dht`** | `telemetry` | `sensorhub/dht/<id>/telemetry` | Publicación periódica (cada 10s, Retained) | `{"temperature":20.0,"humidity":46.0}` |
 | **`pir`** | `telemetry` | `sensorhub/pir/<id>/telemetry` | Detección de movimiento | `{"motion":true}` |
 | | `telemetry` | `sensorhub/pir/<id>/telemetry` | Fin de detección / Reposo | `{"motion":false}` |
 | **`switch`** | `command` | `sensorhub/switch/<id>/command` | Orden: Encender actuador | `{"state":"on"}` |

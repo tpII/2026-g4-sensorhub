@@ -27,6 +27,13 @@
 #endif
 #endif
 
+// --- MQTT (ver wiki 03, catálogo por dispositivo) ---
+// Telemetría con retain: el último estado confirmado queda disponible para cualquier suscriptor
+#define CONFIG_SWITCH_TELEMETRY_QOS     1
+#define CONFIG_SWITCH_TELEMETRY_RETAIN  1
+// QoS de la suscripción a comandos (on/off son idempotentes, QoS 1 alcanza)
+#define CONFIG_SWITCH_COMMAND_QOS       1
+
 // Inicia el servicio del actuador Switch (suscripción a comandos y feedback)
 esp_err_t switch_device_start(void);
 

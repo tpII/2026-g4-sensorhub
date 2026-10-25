@@ -11,11 +11,7 @@ typedef void (*mqtt_msg_callback_t)(const char *topic, int topic_len, const char
 // Inicializa el cliente MQTT con el protocolo seleccionado en app_config.h y el client_id indicado
 esp_err_t mqtt_mgr_init(const char *client_id);
 
-// Publica un mensaje en el topico indicado
-// Publica un mensaje en el topico indicado (QoS 0, retain false)
-esp_err_t mqtt_mgr_publish(const char *topic, const char *data);
-
-// Publica un mensaje con QoS y flag Retain especificos
+// Publica un mensaje con QoS y flag Retain especificos (cada device define los suyos en su header)
 esp_err_t mqtt_mgr_publish_with_flags(const char *topic, const char *data, int qos, int retain);
 
 // Suscribe a un topico MQTT

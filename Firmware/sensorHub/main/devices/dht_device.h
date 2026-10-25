@@ -33,6 +33,11 @@
 // Intervalo de muestreo y publicación (ms)
 #define CONFIG_SAMPLE_INTERVAL_MS       10000
 
+// --- MQTT (ver wiki 03, catálogo por dispositivo) ---
+// Retain: un nuevo suscriptor obtiene la última lectura sin esperar el próximo ciclo
+#define CONFIG_DHT_TELEMETRY_QOS        1
+#define CONFIG_DHT_TELEMETRY_RETAIN     1
+
 // Inicia la tarea FreeRTOS de sensado de temperatura y humedad
 esp_err_t dht_device_start(void);
 

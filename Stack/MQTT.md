@@ -64,7 +64,7 @@ sensorhub/<device_type>/<device_id>/<canal>
 - **Rol en el bus:** Sensor / Productor unidireccional (ESP32 ➔ Broker).
 - **Driver asociado:** [`devices/dht_device.c`](../Firmwares/sensorHub/main/devices/dht_device.c) (soporta DHT11 y DHT22).
 - **Frecuencia:** Periódica, cada 10 segundos por defecto (`CONFIG_SAMPLE_INTERVAL_MS`).
-- **Calidad de servicio:** QoS 1, Retain: `false`.
+- **Calidad de servicio:** QoS 1, Retain: `true`.
 
 #### Acción 1: Publicación Periódica de Telemetría
 

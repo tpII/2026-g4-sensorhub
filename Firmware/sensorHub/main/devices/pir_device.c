@@ -65,7 +65,7 @@ static void pir_task(void *pvParameters) {
             const char *topic = system_get_telemetry_topic();
 
             if (mqtt_mgr_is_connected()) {
-                mqtt_mgr_publish(topic, json_str);
+                mqtt_mgr_publish_with_flags(topic, json_str, CONFIG_PIR_TELEMETRY_QOS, CONFIG_PIR_TELEMETRY_RETAIN);
                 ESP_LOGI(TAG, "Evento PIR publicado en [%s]: %s", topic, json_str);
             }
 
