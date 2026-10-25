@@ -3,6 +3,7 @@
 #include "esp_log.h"
 
 #include "system_mgr.h"
+#include "led_mgr.h"
 #include "wifi_mgr.h"
 #include "time_mgr.h"
 #include "mqtt_mgr.h"
@@ -15,6 +16,9 @@ void app_main(void) {
 
     // 1. Inicializa almacenamiento NVS e identidad del dispositivo (MAC y topicos)
     ESP_ERROR_CHECK(system_init());
+
+    // LED de estado: parpadea cada 1 s hasta que haya WiFi (no es fatal si no se puede iniciar)
+    led_mgr_init();
 
     // 2. Inicializa y conecta el cliente WiFi
     ESP_LOGI(TAG, "Conectando a red WiFi...");

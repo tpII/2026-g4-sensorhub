@@ -1,5 +1,6 @@
 #include "wifi_mgr.h"
 #include "app_config.h"
+#include "led_mgr.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -16,11 +17,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        led_mgr_set_wifi_connected(false);
         wifi_event_sta_disconnected_t *ev = (wifi_event_sta_disconnected_t *)event_data;
         ESP_LOGW(TAG, "Desconectado (reason=%d). Reintentando conexion...", ev->reason);
         esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        led_mgr_set_wifi_connected(true);
         ESP_LOGI(TAG, "Conectado a WiFi y con IP asignada.");
     }
 }

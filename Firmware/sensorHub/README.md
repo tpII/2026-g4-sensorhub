@@ -22,6 +22,7 @@ Firmwares/sensorHub/
     ├── system_mgr.h / .c          # NVS, identidad de hardware (MAC) y generador de tópicos
     ├── wifi_mgr.h / .c            # Manejador de WiFi STA con auto-reconexión y eventos
     ├── time_mgr.h / .c            # Sincronización horaria SNTP para el campo "ts" de los payloads
+    ├── led_mgr.h / .c             # LED de estado: parpadeo sin WiFi, 3 parpadeos al conectar, destello por mensaje MQTT
     ├── mqtt_mgr.h / .c            # Cliente MQTT universal (MQTT, MQTTS, WS, WSS, Pub/Sub)
     ├── sensor_service.h / .c      # Despachador que arranca la tarea según CONFIG_DEVICE_TYPE
     └── devices/                   # Módulos encapsulados por tipo de dispositivo
@@ -44,6 +45,8 @@ Este archivo contiene exclusivamente parámetros globales y de red, independient
 | **`CONFIG_WIFI_PASS`** | String | Contraseña de la red WiFi. |
 | **`CONFIG_SELECTED_PROTOCOL`** | `PROTOCOL_MQTT`<br>`PROTOCOL_MQTTS`<br>`PROTOCOL_WS`<br>`PROTOCOL_WSS` | Protocolo de transporte MQTT:<br>• `PROTOCOL_MQTT`: TCP plano (puerto 1883)<br>• `PROTOCOL_MQTTS`: TLS / SSL (puerto 8883)<br>• `PROTOCOL_WS`: WebSockets (puerto 8083)<br>• `PROTOCOL_WSS`: WebSockets Seguro (puerto 8084) |
 | **`CONFIG_NTP_SERVER`** | String (default: `"pool.ntp.org"`) | Servidor SNTP para sincronizar la hora del campo `ts`. Si no responde, los payloads se envían sin `ts` hasta sincronizar. |
+| **`CONFIG_STATUS_LED_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | LED de estado, definido por chip:<br>• `GPIO_NUM_8` en ESP32-C3 SuperMini (LED azul integrado).<br>• `GPIO_NUM_2` en ESP32 DevKit (LED azul integrado).<br>• `GPIO_NUM_NC` (deshabilitado) en S2/S3/C6/H2, cuyas placas traen un LED RGB direccionable.<br>Sin WiFi parpadea 1 vez por segundo; al conectar hace 3 parpadeos en 1 s; cada mensaje MQTT enviado o recibido produce un destello corto. En los nodos `switch` se deshabilita si coincide con `CONFIG_SWITCH_PIN`. |
+| **`CONFIG_STATUS_LED_ACTIVE_LEVEL`** | `1` o `0` | Nivel que enciende el LED de estado: `0` en el C3 SuperMini (*active-low*), `1` en el ESP32 DevKit. |
 | **`CONFIG_BROKER_HOST`** | String (ej: `"broker.emqx.io"`) | Host o IP del broker MQTT. |
 | **`CONFIG_WS_PATH`** | String (ej: `"/mqtt"`) | Path para conexiones WebSockets. |
 | **`CONFIG_MQTT_TOPIC_PREFIX`** | String (default: `"sensorhub"`) | Espacio de nombres raíz para todos los tópicos. |

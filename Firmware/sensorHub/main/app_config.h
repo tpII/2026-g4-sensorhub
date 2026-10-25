@@ -2,6 +2,7 @@
 #define APP_CONFIG_H
 
 #include "sdkconfig.h"
+#include "driver/gpio.h"
 
 // =============================================================================
 // Configuración General de la Aplicación y Conectividad (Agnóstica del Hardware)
@@ -49,5 +50,21 @@
 // Credenciales MQTT (opcionales)
 #define CONFIG_MQTT_USERNAME            ""
 #define CONFIG_MQTT_PASSWORD            ""
+
+// --- LED de estado (sin WiFi: parpadeo cada 1 s; al conectar: 3 parpadeos; actividad MQTT: destello) ---
+// Pin y nivel activo del LED integrado de cada placa. GPIO_NUM_NC deshabilita el LED de estado.
+// Las placas de S2, S3, C6 y H2 traen un LED RGB direccionable (WS2812), que no se maneja con un GPIO
+// simple: ahi queda deshabilitado; para usarlo, conectar un LED comun y poner su pin aca.
+// Si el pin coincide con CONFIG_SWITCH_PIN, en los nodos switch el LED de estado se deshabilita solo.
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+    #define CONFIG_STATUS_LED_PIN           GPIO_NUM_8    // LED azul integrado del ESP32-C3 SuperMini
+    #define CONFIG_STATUS_LED_ACTIVE_LEVEL  0             // Enciende en bajo
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+    #define CONFIG_STATUS_LED_PIN           GPIO_NUM_2    // LED azul integrado del ESP32 DevKit
+    #define CONFIG_STATUS_LED_ACTIVE_LEVEL  1             // Enciende en alto
+#else
+    #define CONFIG_STATUS_LED_PIN           GPIO_NUM_NC
+    #define CONFIG_STATUS_LED_ACTIVE_LEVEL  1
+#endif
 
 #endif // APP_CONFIG_H

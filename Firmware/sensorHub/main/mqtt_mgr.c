@@ -1,6 +1,7 @@
 #include "mqtt_mgr.h"
 #include "app_config.h"
 #include "system_mgr.h"
+#include "led_mgr.h"
 #include "time_mgr.h"
 #include "mqtt_client.h"
 #include "esp_log.h"
@@ -42,6 +43,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                 snprintf(online_msg, sizeof(online_msg), "{\"online\":true}");
             }
             esp_mqtt_client_publish(client, system_get_status_topic(), online_msg, 0, 1, 1);
+            led_mgr_notify_activity();
             ESP_LOGI(TAG, "Publicado estado ONLINE retenido en [%s]: %s", system_get_status_topic(), online_msg);
 
             // 2. Re-suscribir si habia un topico registrado (resiliencia a reconexiones del broker)
@@ -62,6 +64,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             }
             break;
         case MQTT_EVENT_DATA:
+            led_mgr_notify_activity();
             if (s_msg_callback) {
                 s_msg_callback(event->topic, event->topic_len, event->data, event->data_len);
             }
@@ -117,7 +120,11 @@ esp_err_t mqtt_mgr_publish_with_flags(const char *topic, const char *data, int q
         return ESP_ERR_INVALID_STATE;
     }
     int msg_id = esp_mqtt_client_publish(client, topic, data, 0, qos, retain);
-    return (msg_id >= 0) ? ESP_OK : ESP_FAIL;
+    if (msg_id < 0) {
+        return ESP_FAIL;
+    }
+    led_mgr_notify_activity();
+    return ESP_OK;
 }
 
 esp_err_t mqtt_mgr_subscribe(const char *topic, int qos) {
