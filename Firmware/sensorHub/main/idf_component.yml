@@ -1,2 +1,2 @@
 dependencies:
-  esp-idf-lib/dht: "^1.2.0"
+  esp-idf-lib/dht: "1.2.0"

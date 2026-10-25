@@ -13,6 +13,7 @@ El código está estructurado siguiendo el principio de responsabilidad única (
 ```text
 Firmwares/sensorHub/
 ├── CMakeLists.txt                 # Definición del proyecto CMake
+├── sdkconfig.defaults             # Opciones de Kconfig fijadas por el proyecto (el sdkconfig se genera en el build)
 └── main/
     ├── idf_component.yml          # Dependencias oficiales (esp-idf-lib/dht)
     ├── CMakeLists.txt             # Registro de fuentes y carpetas de include
@@ -148,6 +149,13 @@ idf.py -DDEVICE_TYPE=switch build
 # O vía variable de entorno:
 DEVICE_TYPE=pir idf.py clean build
 ```
+
+### Archivos generados en el build (no versionados)
+
+`sdkconfig` y `dependencies.lock` se generan en cada build y están en `.gitignore`. Su formato depende de la versión de ESP-IDF, por lo que versionarlos rompe el build cuando alguien compila con otra versión (por ejemplo, un lock generado con ESP-IDF 5.3 no lo puede leer el 5.2.2 de Docker).
+
+- **Configuración de Kconfig:** cualquier opción que el proyecto necesite distinta del default va en `sdkconfig.defaults`; `idf.py menuconfig` solo cambia el `sdkconfig` local y se pierde en el próximo build limpio. El target no va ahí: lo define `TARGET` (`idf.py set-target`).
+- **Versiones de componentes:** se fijan con versión exacta en `main/idf_component.yml` (ej. `esp-idf-lib/dht: "1.2.0"`), para que el build sea reproducible sin lock.
 
 ---
 

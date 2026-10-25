@@ -49,7 +49,11 @@ Ejemplo para compilar y flashear:
 ```bash
 <variables> docker compose run --rm flasher
 # Ejemplo para esp32 con sensor DHT. Los valores no definidos utilizan los defaults del compose 
-TARGET=esp32 PORT=/dev/ttyUSB0 DEVICE_TYPE=dht docker compose run --rm flasher
+TARGET=esp32c3 PORT=/dev/ttyACM0 DEVICE_TYPE=dht docker compose run --rm flasher
+
+TARGET=esp32 PORT=/dev/ttyUSB0 DEVICE_TYPE=pir docker compose run --rm flasher
+
+
 ```
 
 Ejemplo para compilar sin flashear:
@@ -196,6 +200,12 @@ idf.py -p COMX flash monitor -b 115200
 ---
 
 ## Errores comunes
+
+> "ERROR: Cannot parse components lock file. Please check that /project/dependencies.lock is a valid lock YAML file." **Solucion:**
+
+- El `dependencies.lock` (o el `sdkconfig`) quedó generado por otra versión de ESP-IDF, por ejemplo una instalación local 5.3 distinta del 5.2.2 de Docker. Ambos son archivos generados y no se versionan: borrarlos (`rm -f Firmware/sensorHub/dependencies.lock Firmware/sensorHub/sdkconfig`) y volver a compilar. El `-f` evita la confirmación cuando los creó el contenedor y pertenecen a `root`.
+
+---
 
 > "A fatal error occurred: Serial data stream stopped: Possible serial noise or corruption." **Solucion:**
 
