@@ -129,7 +129,7 @@ Los tópicos se construyen automáticamente en tiempo de ejecución con la fórm
 
 ## 4. Compilación, Flasheo y Monitoreo (Docker Compose)
 
-Todas las herramientas de compilación y flasheo están contenidas en Docker mediante ESP-IDF oficial v5.2.2 en `Firmwares/utils/`.
+Todas las herramientas de compilación y flasheo están contenidas en Docker mediante ESP-IDF oficial v5.5.6 en `Firmwares/utils/`.
 
 ### Variables de entorno (`Firmwares/utils/.env`)
 
@@ -152,7 +152,7 @@ DEVICE_TYPE=pir idf.py clean build
 
 ### Archivos generados en el build (no versionados)
 
-`sdkconfig` y `dependencies.lock` se generan en cada build y están en `.gitignore`. Su formato depende de la versión de ESP-IDF, por lo que versionarlos rompe el build cuando alguien compila con otra versión (por ejemplo, un lock generado con ESP-IDF 5.3 no lo puede leer el 5.2.2 de Docker).
+`sdkconfig` y `dependencies.lock` se generan en cada build y están en `.gitignore`. Su formato depende de la versión de ESP-IDF, por lo que versionarlos rompe el build cuando alguien compila con otra versión (por ejemplo, un lock generado con ESP-IDF 5.3 no lo puede leer el 5.2.2 que se usaba antes en Docker).
 
 - **Configuración de Kconfig:** cualquier opción que el proyecto necesite distinta del default va en `sdkconfig.defaults`; `idf.py menuconfig` solo cambia el `sdkconfig` local y se pierde en el próximo build limpio. El target no va ahí: lo define `TARGET` (`idf.py set-target`).
 - **Versiones de componentes:** se fijan con versión exacta en `main/idf_component.yml` (ej. `esp-idf-lib/dht: "1.2.0"`), para que el build sea reproducible sin lock.

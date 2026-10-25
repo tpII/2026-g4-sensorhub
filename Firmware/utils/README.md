@@ -20,7 +20,7 @@ Este entorno permite compilar, flashear y monitorear cualquier modelo de ESP (`e
    ```bash
    ls -la /dev/ttyUSB* && ls -la /dev/ttyACM* # Verificar ubicacion puerto
 
-   TARGET=<target> PORT=<puerto> DEVICE_TYPE=<dht|pir|switch> PROJECT_DIR=../sensorHub IDF_IMAGE=espressif/idf:v5.2.2 docker compose run --rm flasher
+   TARGET=<target> PORT=<puerto> DEVICE_TYPE=<dht|pir|switch> PROJECT_DIR=../sensorHub IDF_IMAGE=espressif/idf:v5.5.6 docker compose run --rm flasher
    ```
 
 3. (Opcional) Abrir el monitor serial en una consola:
@@ -42,7 +42,7 @@ Los parametros se indican antes del comando `docker compose`. Las opciones dispo
 | `BAUD` | Velocidad del monitor serial | `115200` |
 | `DEVICE_TYPE` | `dht`, `pir` o `switch` | vacio en Compose; el firmware usa `dht` |
 | `PROJECT_DIR` | Ruta al proyecto montado | `../sensorHub` |
-| `IDF_IMAGE` | Imagen Docker de ESP-IDF | `espressif/idf:v5.2.2` |
+| `IDF_IMAGE` | Imagen Docker de ESP-IDF | `espressif/idf:v5.5.6` |
 
 Ejemplo para compilar y flashear:
 
@@ -109,7 +109,7 @@ docker run --rm -it eclipse-mosquitto mosquitto_sub -h <host-boker> -t "sensorhu
 4. Ejecutar, indicando todos los parametros del dispositivo para compilar y flashear:
 
    ```bash
-   TARGET=<target> PORT=<puerto> DEVICE_TYPE=<dht|pir|switch> PROJECT_DIR=../sensorHub IDF_IMAGE=espressif/idf:v5.2.2 docker compose run --rm flasher
+   TARGET=<target> PORT=<puerto> DEVICE_TYPE=<dht|pir|switch> PROJECT_DIR=../sensorHub IDF_IMAGE=espressif/idf:v5.5.6 docker compose run --rm flasher
    ```
 
 5. (Opcional) Abrir el monitor de consola:
@@ -120,7 +120,7 @@ docker run --rm -it eclipse-mosquitto mosquitto_sub -h <host-boker> -t "sensorhu
 
 ---
 
-### Windows (ESP-IDF nativo) (v5.2.2, 6.1 no funciona bien)
+### Windows (ESP-IDF nativo) (v5.5.6; ESP-IDF 6.x no es compatible)
 
    Tambien sirve para Linux utilizando ESP-IDF sin docker
 
@@ -135,7 +135,7 @@ docker run --rm -it eclipse-mosquitto mosquitto_sub -h <host-boker> -t "sensorhu
    Reiniciar la consola y luego ejecutar
 
    ```
-   eim install --idf-versions v5.2.2 --target all
+   eim install --idf-versions v5.5.6 --target all
    ```
 
 2. Abrir **ESP-IDF PowerShell** o **ESP-IDF Command Prompt**. La configuracion de ESP-IDF es por sesion: no necesariamente queda agregada al PATH global de Windows.
@@ -144,14 +144,14 @@ docker run --rm -it eclipse-mosquitto mosquitto_sub -h <host-boker> -t "sensorhu
    ```powershell
    # Reemplazar por la ruta de instalacion
    Set-ExecutionPolicy -Scope Process Bypass
-   $env:Path="C:\Espressif\tools\python;C:\Espressif\tools\python\v5.2.2\venv\Scripts;$env:Path"
-   & "C:\esp\v5.2.2\esp-idf\install.ps1"
+   $env:Path="C:\Espressif\tools\python;C:\Espressif\tools\python\v5.5.6\venv\Scripts;$env:Path"
+   & "C:\esp\v5.5.6\esp-idf\install.ps1"
    ```
 
    `install.ps1` crea el entorno Python que necesita ESP-IDF. Ejecutarlo una vez, o nuevamente si aparece un error indicando que falta `python_env`. Cuando termine correctamente, cargar el entorno en la sesion actual:
 
    ```powershell
-   & "C:\esp\v5.2.2\esp-idf\export.ps1"
+   & "C:\esp\v5.5.6\esp-idf\export.ps1"
    ```
 
    En una consola nueva hay que volver a ejecutar `export.ps1`. No se recomienda agregar manualmente solo `tools` al PATH, porque ESP-IDF tambien necesita su entorno de Python, CMake, Ninja y otras variables.
@@ -203,7 +203,13 @@ idf.py -p COMX flash monitor -b 115200
 
 > "ERROR: Cannot parse components lock file. Please check that /project/dependencies.lock is a valid lock YAML file." **Solucion:**
 
-- El `dependencies.lock` (o el `sdkconfig`) quedó generado por otra versión de ESP-IDF, por ejemplo una instalación local 5.3 distinta del 5.2.2 de Docker. Ambos son archivos generados y no se versionan: borrarlos (`rm -f Firmware/sensorHub/dependencies.lock Firmware/sensorHub/sdkconfig`) y volver a compilar. El `-f` evita la confirmación cuando los creó el contenedor y pertenecen a `root`.
+- El `dependencies.lock` (o el `sdkconfig`) quedó generado por otra versión de ESP-IDF, por ejemplo una instalación local 5.3 distinta del 5.5.6 de Docker. Ambos son archivos generados y no se versionan: borrarlos (`rm -f Firmware/sensorHub/dependencies.lock Firmware/sensorHub/sdkconfig`) y volver a compilar. El `-f` evita la confirmación cuando los creó el contenedor y pertenecen a `root`.
+
+---
+
+> "'/opt/esp/python_env/idf5.5_py3.12_env/bin/python' is currently active in the environment while the project was configured with '/opt/esp/python_env/idf5.2_py3.10_env/bin/python'. Run 'idf.py fullclean' to start again." **Solucion:**
+
+- La carpeta `build/` fue configurada por otra versión de ESP-IDF (por ejemplo, tras cambiar `IDF_IMAGE`). El `flasher` ya corre `idf.py fullclean`, pero si el `sdkconfig` viejo también quedó de la otra versión puede migrarse mal (por ejemplo, cambiando el target a `esp32`). Borrar `sdkconfig` y `dependencies.lock` como en el error anterior y volver a correr el `flasher`, que regenera todo con `set-target`.
 
 ---
 

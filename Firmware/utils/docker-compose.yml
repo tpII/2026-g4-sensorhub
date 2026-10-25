@@ -1,6 +1,6 @@
 services:
   flasher:
-    image: ${IDF_IMAGE:-espressif/idf:v5.2.2}
+    image: ${IDF_IMAGE:-espressif/idf:v5.5.6}
     container_name: esp_flasher
     privileged: true
     stdin_open: true
@@ -26,13 +26,13 @@ services:
           idf.py set-target $$TARGET;
         fi &&
         echo '=== Compilando firmware (Target: '$$TARGET', Device: '$${DEVICE_TYPE:-dht}') ===' &&
-        idf.py clean build &&
+        idf.py fullclean build &&
         echo '=== Flasheando en '$$PORT' ===' &&
         idf.py -p $$PORT flash
       "
 
   flash:
-    image: ${IDF_IMAGE:-espressif/idf:v5.2.2}
+    image: ${IDF_IMAGE:-espressif/idf:v5.5.6}
     container_name: esp_flash_only
     privileged: true
     working_dir: /project
@@ -45,7 +45,7 @@ services:
     command: bash -c "idf.py -p $$PORT flash"
 
   monitor:
-    image: ${IDF_IMAGE:-espressif/idf:v5.2.2}
+    image: ${IDF_IMAGE:-espressif/idf:v5.5.6}
     container_name: esp_monitor
     privileged: true
     stdin_open: true
@@ -68,7 +68,7 @@ services:
       "
 
   build:
-    image: ${IDF_IMAGE:-espressif/idf:v5.2.2}
+    image: ${IDF_IMAGE:-espressif/idf:v5.5.6}
     container_name: esp_builder
     working_dir: /project
     volumes:
