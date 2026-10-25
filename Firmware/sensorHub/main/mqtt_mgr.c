@@ -1,6 +1,7 @@
 #include "mqtt_mgr.h"
 #include "app_config.h"
 #include "system_mgr.h"
+#include "time_mgr.h"
 #include "mqtt_client.h"
 #include "esp_log.h"
 #include "esp_idf_version.h"
@@ -32,9 +33,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             ESP_LOGI(TAG, "Conectado al broker MQTT (%s)", CONFIG_BROKER_URI);
             is_connected = true;
 
-            // 1. Notificar presencia ONLINE retenida en el canal de status
-            esp_mqtt_client_publish(client, system_get_status_topic(), "{\"online\":true}", 0, 1, 1);
-            ESP_LOGI(TAG, "Publicado estado ONLINE retenido en [%s]", system_get_status_topic());
+            // 1. Notificar presencia ONLINE retenida en el canal de status (con "ts" si la hora esta sincronizada)
+            char online_msg[48];
+            int64_t ts = time_mgr_now_ms();
+            if (ts > 0) {
+                snprintf(online_msg, sizeof(online_msg), "{\"online\":true,\"ts\":%lld}", ts);
+            } else {
+                snprintf(online_msg, sizeof(online_msg), "{\"online\":true}");
+            }
+            esp_mqtt_client_publish(client, system_get_status_topic(), online_msg, 0, 1, 1);
+            ESP_LOGI(TAG, "Publicado estado ONLINE retenido en [%s]: %s", system_get_status_topic(), online_msg);
 
             // 2. Re-suscribir si habia un topico registrado (resiliencia a reconexiones del broker)
             if (s_subscribed_topic[0] != '\0') {

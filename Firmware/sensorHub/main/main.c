@@ -4,6 +4,7 @@
 
 #include "system_mgr.h"
 #include "wifi_mgr.h"
+#include "time_mgr.h"
 #include "mqtt_mgr.h"
 #include "sensor_service.h"
 
@@ -21,12 +22,17 @@ void app_main(void) {
     // Si no hay IP en 1 minuto, el ESP_ERROR_CHECK reinicia el chip
     ESP_ERROR_CHECK(wifi_mgr_wait_connected(pdMS_TO_TICKS(60000)));
 
-    // 3. Inicializa cliente MQTT con client_id unico (MAC del chip)
+    // 3. Sincroniza la hora por SNTP para el campo "ts" de los payloads.
+    // No es fatal: si vence el timeout se sigue sin "ts" (EMQX usa su propia hora) hasta que sincronice.
+    ESP_LOGI(TAG, "Sincronizando hora (SNTP)...");
+    time_mgr_init(pdMS_TO_TICKS(15000));
+
+    // 4. Inicializa cliente MQTT con client_id unico (MAC del chip)
     ESP_LOGI(TAG, "Iniciando cliente MQTT...");
     ESP_ERROR_CHECK(mqtt_mgr_init(system_get_device_id()));
     ESP_ERROR_CHECK(mqtt_mgr_wait_connected(pdMS_TO_TICKS(10000)));
 
-    // 4. Despacha e inicia el servicio correspondiente al tipo de dispositivo
+    // 5. Despacha e inicia el servicio correspondiente al tipo de dispositivo
     ESP_LOGI(TAG, "Iniciando servicio del dispositivo...");
     ESP_ERROR_CHECK(sensor_service_start());
 }

@@ -7,6 +7,7 @@ idf_component_register(
          "system_mgr.c"
          "wifi_mgr.c"
          "mqtt_mgr.c"
+         "time_mgr.c"
          "sensor_service.c"
          "devices/dht_device.c"
          "devices/pir_device.c"

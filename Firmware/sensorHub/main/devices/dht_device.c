@@ -1,6 +1,7 @@
 #include "dht_device.h"
 #include "system_mgr.h"
 #include "mqtt_mgr.h"
+#include "time_mgr.h"
 
 #include <dht.h>
 #include "cJSON.h"
@@ -34,13 +35,18 @@ static void dht_task(void *pvParameters) {
         if (err == ESP_OK) {
             ESP_LOGI(TAG, "Lectura %s -> Temp: %.1f C, Hum: %.1f %%", sensor_name, temp, hum);
 
-            // Construye el payload JSON (solo métricas del sensor)
+            // Hora de la lectura (0 si SNTP aun no sincronizo)
+            int64_t ts = time_mgr_now_ms();
+
+            // Construye el payload JSON (métricas del sensor + ts)
             // Crea un objeto JSON vacio {}
             cJSON *root = cJSON_CreateObject();
             // Redondea a un decimal y agrega al objeto JSON Ej 23.46 → 234.6 + 0.5 = 235.1 → 235 → 23.5
             cJSON_AddNumberToObject(root, "temperature", (double)((int)(temp * 10.0f + (temp >= 0 ? 0.5f : -0.5f))) / 10.0);
             // Idem para la humedad (siempre positiva, por eso solo suma 0.5)
             cJSON_AddNumberToObject(root, "humidity", (double)((int)(hum * 10.0f + 0.5f)) / 10.0);
+            // Sin hora valida se omite "ts" y EMQX usa la hora de llegada
+            if (ts > 0) cJSON_AddNumberToObject(root, "ts", (double)ts);
 
             // Serializa el objeto a texto JSON sin espacios (reserva memoria dinamica)
             char *json_str = cJSON_PrintUnformatted(root);

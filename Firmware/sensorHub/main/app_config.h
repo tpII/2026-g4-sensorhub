@@ -20,6 +20,9 @@
 // Modificar aquí el protocolo deseado:
 #define CONFIG_SELECTED_PROTOCOL        PROTOCOL_MQTT
 
+// --- Sincronizacion horaria (SNTP) para el campo "ts" de los payloads ---
+#define CONFIG_NTP_SERVER               "pool.ntp.org"
+
 // --- Broker MQTT & Endpoints ---
 #define CONFIG_BROKER_HOST              "192.168.0.190"
 #define CONFIG_WS_PATH                  "/mqtt"

@@ -1,6 +1,7 @@
 #include "pir_device.h"
 #include "system_mgr.h"
 #include "mqtt_mgr.h"
+#include "time_mgr.h"
 
 #include "cJSON.h"
 #include "esp_log.h"
@@ -59,6 +60,9 @@ static void pir_task(void *pvParameters) {
             cJSON *root = cJSON_CreateObject();
             // Agrega el campo booleano "motion": true/false
             cJSON_AddBoolToObject(root, "motion", motion);
+            // Hora del evento; sin hora valida se omite "ts" y EMQX usa la hora de llegada
+            int64_t ts = time_mgr_now_ms();
+            if (ts > 0) cJSON_AddNumberToObject(root, "ts", (double)ts);
 
             // Serializa el objeto a texto JSON sin espacios (reserva memoria dinamica)
             char *json_str = cJSON_PrintUnformatted(root);

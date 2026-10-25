@@ -20,6 +20,7 @@ Firmwares/sensorHub/
     ├── main.c                     # Orquestador del sistema
     ├── system_mgr.h / .c          # NVS, identidad de hardware (MAC) y generador de tópicos
     ├── wifi_mgr.h / .c            # Manejador de WiFi STA con auto-reconexión y eventos
+    ├── time_mgr.h / .c            # Sincronización horaria SNTP para el campo "ts" de los payloads
     ├── mqtt_mgr.h / .c            # Cliente MQTT universal (MQTT, MQTTS, WS, WSS, Pub/Sub)
     ├── sensor_service.h / .c      # Despachador que arranca la tarea según CONFIG_DEVICE_TYPE
     └── devices/                   # Módulos encapsulados por tipo de dispositivo
@@ -41,6 +42,7 @@ Este archivo contiene exclusivamente parámetros globales y de red, independient
 | **`CONFIG_WIFI_SSID`** | String (ej: `"MiWiFi"`) | Nombre de la red WiFi 2.4 GHz. |
 | **`CONFIG_WIFI_PASS`** | String | Contraseña de la red WiFi. |
 | **`CONFIG_SELECTED_PROTOCOL`** | `PROTOCOL_MQTT`<br>`PROTOCOL_MQTTS`<br>`PROTOCOL_WS`<br>`PROTOCOL_WSS` | Protocolo de transporte MQTT:<br>• `PROTOCOL_MQTT`: TCP plano (puerto 1883)<br>• `PROTOCOL_MQTTS`: TLS / SSL (puerto 8883)<br>• `PROTOCOL_WS`: WebSockets (puerto 8083)<br>• `PROTOCOL_WSS`: WebSockets Seguro (puerto 8084) |
+| **`CONFIG_NTP_SERVER`** | String (default: `"pool.ntp.org"`) | Servidor SNTP para sincronizar la hora del campo `ts`. Si no responde, los payloads se envían sin `ts` hasta sincronizar. |
 | **`CONFIG_BROKER_HOST`** | String (ej: `"broker.emqx.io"`) | Host o IP del broker MQTT. |
 | **`CONFIG_WS_PATH`** | String (ej: `"/mqtt"`) | Path para conexiones WebSockets. |
 | **`CONFIG_MQTT_TOPIC_PREFIX`** | String (default: `"sensorhub"`) | Espacio de nombres raíz para todos los tópicos. |
@@ -111,13 +113,15 @@ Los tópicos se construyen automáticamente en tiempo de ejecución con la fórm
 
 | Dispositivo (`device_type`) | Canal | Tópico Completo | Acción / Disparo | Payload JSON Exacto |
 | :--- | :--- | :--- | :--- | :--- |
-| **`dht`** | `telemetry` | `sensorhub/dht/<id>/telemetry` | Publicación periódica (cada 10s, Retained) | `{"temperature":20.0,"humidity":46.0}` |
-| **`pir`** | `telemetry` | `sensorhub/pir/<id>/telemetry` | Detección de movimiento | `{"motion":true}` |
-| | `telemetry` | `sensorhub/pir/<id>/telemetry` | Fin de detección / Reposo | `{"motion":false}` |
+| **`dht`** | `telemetry` | `sensorhub/dht/<id>/telemetry` | Publicación periódica (cada 10s, Retained) | `{"temperature":20.0,"humidity":46.0,"ts":1718000000000}` |
+| **`pir`** | `telemetry` | `sensorhub/pir/<id>/telemetry` | Detección de movimiento | `{"motion":true,"ts":1718000000000}` |
+| | `telemetry` | `sensorhub/pir/<id>/telemetry` | Fin de detección / Reposo | `{"motion":false,"ts":1718000000000}` |
 | **`switch`** | `command` | `sensorhub/switch/<id>/command` | Orden: Encender actuador | `{"state":"on"}` |
 | | `command` | `sensorhub/switch/<id>/command` | Orden: Apagar actuador | `{"state":"off"}` |
-| | `telemetry` | `sensorhub/switch/<id>/telemetry` | Feedback de estado (Retained) | `{"state":"on"}` o `{"state":"off"}` |
-| **`*` (todos)** | `status` | `sensorhub/<type>/<id>/status` | Presencia online / caída LWT (Retained) | `{"online":true}` / `{"online":false}` |
+| | `telemetry` | `sensorhub/switch/<id>/telemetry` | Feedback de estado (Retained) | `{"state":"on","ts":1718000000000}` o `{"state":"off","ts":1718000000000}` |
+| **`*` (todos)** | `status` | `sensorhub/<type>/<id>/status` | Presencia online / caída LWT (Retained) | `{"online":true,"ts":1718000000000}` / `{"online":false}` |
+
+**`ts`** es la hora de generación en epoch de milisegundos, obtenida del reloj sincronizado por SNTP. Si el reloj todavía no sincronizó, el campo se omite y EMQX usa su propia hora de llegada. El Last Will (`{"online":false}`) nunca lleva `ts`. Los comandos que llegan al switch pueden traer `ts` (lo agrega el MCP); el firmware lo ignora.
 
 > [IMPORTANTE]
 > Para conocer la especificación formal exhaustiva, reglas de filtrado SQL para EMQX/InfluxDB y ejemplos de prueba CLI, consultar el documento en [Stack/MQTT.md](../../Stack/MQTT.md).

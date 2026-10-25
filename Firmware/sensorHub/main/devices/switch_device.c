@@ -1,6 +1,7 @@
 #include "switch_device.h"
 #include "system_mgr.h"
 #include "mqtt_mgr.h"
+#include "time_mgr.h"
 
 #include "cJSON.h"
 #include "esp_log.h"
@@ -54,11 +55,14 @@ static void on_switch_command(const char *topic, int topic_len, const char *data
     ESP_LOGI(TAG, "Switch conmutado a: %s (GPIO %d = nivel %d)",
              new_level ? "on" : "off", CONFIG_SWITCH_PIN, physical_pin_level);
 
-    // Feedback al tópico de telemetría en minúsculas estándar (solo el estado)
+    // Feedback al tópico de telemetría en minúsculas estándar (estado + ts)
     const char *state_str = new_level ? "on" : "off";
     // Crea el objeto de feedback {} y le agrega el campo string "state"
     cJSON *fb = cJSON_CreateObject();
     cJSON_AddStringToObject(fb, "state", state_str);
+    // Hora de la confirmacion; sin hora valida se omite "ts" y EMQX usa la hora de llegada
+    int64_t ts = time_mgr_now_ms();
+    if (ts > 0) cJSON_AddNumberToObject(fb, "ts", (double)ts);
 
     // Serializa el feedback a texto JSON sin espacios (reserva memoria dinamica)
     char *fb_str = cJSON_PrintUnformatted(fb);
