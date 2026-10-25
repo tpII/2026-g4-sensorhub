@@ -9,7 +9,7 @@
 // el actuador del switch, queda deshabilitado y las demas funciones no hacen nada.
 esp_err_t led_mgr_init(void);
 
-// Informa el estado del WiFi: desconectado -> parpadeo cada 1 s; al conectar -> 3 parpadeos (500 ms on / 1 s off) y apagado
+// Informa el estado del WiFi: desconectado -> parpadeo cada 1 s; al conectar -> 3 parpadeos en ~1 s y apagado
 void led_mgr_set_wifi_connected(bool connected);
 
 // Parpadeo corto de actividad (mensaje MQTT enviado o recibido)

@@ -8,7 +8,7 @@
 // --- Hardware del Actuador Switch (LED / Relé / Carga Digital) ---
 #ifndef CONFIG_SWITCH_PIN
 #if defined(CONFIG_IDF_TARGET_ESP32)
-    #define CONFIG_SWITCH_PIN           GPIO_NUM_2
+    #define CONFIG_SWITCH_PIN           GPIO_NUM_13
 #elif defined(CONFIG_IDF_TARGET_ESP32C3)
     #define CONFIG_SWITCH_PIN           GPIO_NUM_8   // LED integrado en placa ESP32-C3 SuperMini
 #else
@@ -20,11 +20,7 @@
 // Nota: En ESP32-C3 SuperMini el pin en GPIO 8 suele ser Active-Low (0 enciende).
 //       En ESP32 DevKit el pin en GPIO 2 suele ser Active-High (1 enciende).
 #ifndef CONFIG_SWITCH_ACTIVE_LEVEL
-#if defined(CONFIG_IDF_TARGET_ESP32C3)
-    #define CONFIG_SWITCH_ACTIVE_LEVEL  0   // 0 = enciende en bajo
-#else
-    #define CONFIG_SWITCH_ACTIVE_LEVEL  1   // 1 = enciende en alto
-#endif
+#define CONFIG_SWITCH_ACTIVE_LEVEL  0   // 0 = enciende en bajo
 #endif
 
 // --- MQTT (ver wiki 03, catálogo por dispositivo) ---

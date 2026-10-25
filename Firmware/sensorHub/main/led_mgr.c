@@ -13,9 +13,9 @@ static const char *TAG = "LED_MGR";
 
 // Tiempos de los patrones de parpadeo (ms)
 #define LED_DISCONNECTED_HALF_PERIOD_MS 500   // Sin WiFi: 500 ms encendido / 500 ms apagado (1 parpadeo por segundo)
-#define LED_CONNECTED_BLINKS            4     // Al conectar: 3 parpadeos de 500 ms encendido / 1 s apagado
-#define LED_CONNECTED_ON_MS             200
-#define LED_CONNECTED_OFF_MS            600
+#define LED_CONNECTED_BLINKS            3     // Al conectar: 3 parpadeos en ~1 s (150 ms encendido / 183 ms apagado)
+#define LED_CONNECTED_ON_MS             150
+#define LED_CONNECTED_OFF_MS            183
 #define LED_ACTIVITY_ON_MS              50    // Mensaje MQTT: destello corto
 
 // Bits de notificacion de la tarea
