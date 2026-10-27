@@ -9,8 +9,8 @@
 // =============================================================================
 
 // --- Credenciales WiFi ---
-#define CONFIG_WIFI_SSID                "Andy2"
-#define CONFIG_WIFI_PASS                "3CBBCEF573"
+#define CONFIG_WIFI_SSID                "<ssid>"
+#define CONFIG_WIFI_PASS                "<passwd>"
 
 // Limite de potencia de transmision WiFi, en unidades de 0,25 dBm (rango 8..84; ej: 44 = 11 dBm, 34 = 8,5 dBm).
 // 0 = sin limite (maximo del chip, ~20 dBm). Algunas placas ESP32-C3 SuperMini clon no logran
