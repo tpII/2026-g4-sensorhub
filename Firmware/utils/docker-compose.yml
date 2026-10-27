@@ -1,0 +1,86 @@
+services:
+  flasher:
+    image: ${IDF_IMAGE:-espressif/idf:v5.5.6}
+    container_name: esp_flasher
+    privileged: true
+    stdin_open: true
+    tty: true
+    working_dir: /project
+    volumes:
+      - ${PROJECT_DIR:-../sensorHub}:/project
+    devices:
+      - "${PORT:-/dev/ttyUSB0}:${PORT:-/dev/ttyUSB0}"
+    environment:
+      - TARGET=${TARGET:-esp32}
+      - PORT=${PORT:-/dev/ttyUSB0}
+      - BAUD=${BAUD:-115200}
+      - DEVICE_TYPE=${DEVICE_TYPE:-}
+    command: >
+      bash -c "
+        if [ ! -c \"$$PORT\" ]; then
+          echo 'ERROR: No se encontro un dispositivo serial en '$$PORT'. Verifique PORT y el mapeo USB.' >&2;
+          exit 1;
+        fi &&
+        if ! grep -q \"CONFIG_IDF_TARGET=\\\"$$TARGET\\\"\" sdkconfig 2>/dev/null; then
+          echo '=== Configurando target: '$$TARGET' ===' &&
+          idf.py set-target $$TARGET;
+        fi &&
+        echo '=== Compilando firmware (Target: '$$TARGET', Device: '$${DEVICE_TYPE:-dht}') ===' &&
+        idf.py fullclean build &&
+        echo '=== Flasheando en '$$PORT' ===' &&
+        idf.py -p $$PORT flash
+      "
+
+  flash:
+    image: ${IDF_IMAGE:-espressif/idf:v5.5.6}
+    container_name: esp_flash_only
+    privileged: true
+    working_dir: /project
+    volumes:
+      - ${PROJECT_DIR:-../sensorHub}:/project
+    devices:
+      - "${PORT:-/dev/ttyUSB0}:${PORT:-/dev/ttyUSB0}"
+    environment:
+      - PORT=${PORT:-/dev/ttyUSB0}
+    command: bash -c "idf.py -p $$PORT flash"
+
+  monitor:
+    image: ${IDF_IMAGE:-espressif/idf:v5.5.6}
+    container_name: esp_monitor
+    privileged: true
+    stdin_open: true
+    tty: true
+    working_dir: /project
+    volumes:
+      - ${PROJECT_DIR:-../sensorHub}:/project
+    devices:
+      - "${PORT:-/dev/ttyUSB0}:${PORT:-/dev/ttyUSB0}"
+    environment:
+      - PORT=${PORT:-/dev/ttyUSB0}
+      - BAUD=${BAUD:-115200}
+    command: >
+      bash -c "
+        if [ ! -c \"$$PORT\" ]; then
+          echo 'ERROR: No se encontro un dispositivo serial en '$$PORT'. Verifique PORT y el mapeo USB.' >&2;
+          exit 1;
+        fi &&
+        idf.py -p $$PORT -b $$BAUD monitor
+      "
+
+  build:
+    image: ${IDF_IMAGE:-espressif/idf:v5.5.6}
+    container_name: esp_builder
+    working_dir: /project
+    volumes:
+      - ${PROJECT_DIR:-../sensorHub}:/project
+    environment:
+      - TARGET=${TARGET:-esp32}
+      - DEVICE_TYPE=${DEVICE_TYPE:-}
+    command: >
+      bash -c "
+        if ! grep -q \"CONFIG_IDF_TARGET=\\\"$$TARGET\\\"\" sdkconfig 2>/dev/null; then
+          echo '=== Configurando target: '$$TARGET' ===' &&
+          idf.py set-target $$TARGET;
+        fi &&
+        idf.py build
+      "
