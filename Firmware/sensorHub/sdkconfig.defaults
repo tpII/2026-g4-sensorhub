@@ -1,0 +1,3 @@
+# Opciones de Kconfig que el proyecto fija a proposito (solo las que difieren del default de ESP-IDF).
+# El sdkconfig se genera en cada build a partir de este archivo y no se versiona.
+# El target (esp32, esp32c3, ...) no va aca: lo define TARGET en el docker-compose (idf.py set-target).

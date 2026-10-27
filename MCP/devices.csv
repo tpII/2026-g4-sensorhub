@@ -2,3 +2,6 @@ device_type,device_id,friendly_name
 dht,dht_simulado,living
 pir,pir_simulado,cocina
 switch,switch_simulado,oficina
+dht,983dae529858,demo
+pir,983dae529858,demo
+switch,9454c5b096b0,demo
