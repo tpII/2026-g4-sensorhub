@@ -44,6 +44,31 @@ def query_latest_telemetry(client: InfluxDBClient, measurement: str, field: str,
     return None, None
 
 
+def query_latest_true_event(
+    client: InfluxDBClient,
+    measurement: str,
+    field: str,
+    device_id: str,
+    hours: int = 24 * 30,
+) -> Optional[str]:
+    """Obtiene la fecha/hora UTC del último registro donde `field` vale `true`
+    (por ejemplo `motion == true` en `pir_telemetry`), ignorando los eventos
+    posteriores con `false`. Retorna `None` si no hubo ninguno en `hours`."""
+    flux_query = f'''
+    from(bucket: "{INFLUXDB_BUCKET}")
+      |> range(start: -{hours}h)
+      |> filter(fn: (r) => r._measurement == "{measurement}")
+      |> filter(fn: (r) => r.device_id == "{device_id}")
+      |> filter(fn: (r) => r._field == "{field}" and r._value == true)
+      |> last()
+    '''
+    tables = client.query_api().query(flux_query, org=INFLUXDB_ORG)
+    for table in tables:
+        for record in table.records:
+            return record.get_time().astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return None
+
+
 # Última temperatura+humedad en una sola consulta (mismo punto/payload — ver
 # wiki, 06, sección 3.1, por qué conviene una sola query en vez de dos).
 def query_latest_climate(client: InfluxDBClient, device_id: str, hours: int = 24):

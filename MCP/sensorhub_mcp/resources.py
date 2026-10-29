@@ -21,7 +21,12 @@ DEVICE_TYPES = [
         "device_type": "pir",
         "descripcion": "Sensor de movimiento o presencia (infrarrojo pasivo).",
         "mide": ["motion (true/false)"],
-        "tools": [],
+        "tools": [
+            "get_last_motion_state",
+            "get_last_motion_event",
+            "had_motion_in_range",
+            "count_motion_events",
+        ],
     },
     {
         "device_type": "switch",

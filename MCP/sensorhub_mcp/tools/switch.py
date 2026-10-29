@@ -23,11 +23,14 @@ from ..mqtt_client import (
     fetch_mqtt_retained,
     publish_command_and_wait_feedback,
 )
-from ..timeutils import as_utc
 from .common import (
+    INFLUX_UNAVAILABLE,
     DeviceIdParam,
+    RangeEndParam,
+    RangeStartParam,
     actuator_command,
     influx,
+    normalize_past_range,
     read_only,
     run_blocking,
     validate_device_id,
@@ -35,7 +38,6 @@ from .common import (
 
 logger = logging.getLogger(__name__)
 
-INFLUX_UNAVAILABLE = "No se pudo consultar InfluxDB en este momento; reintentar en unos segundos."
 MQTT_UNAVAILABLE = "No se pudo comunicar con el broker MQTT en este momento; reintentar en unos segundos."
 
 SwitchStateParam = Annotated[
@@ -43,27 +45,6 @@ SwitchStateParam = Annotated[
     Field(
         description=(
             "Estado deseado para el actuador, en minúsculas: 'on' para encender o 'off' para apagar."
-        )
-    ),
-]
-
-RangeStartParam = Annotated[
-    datetime,
-    Field(
-        description=(
-            "Inicio del rango en formato ISO 8601 (por ejemplo 2026-10-29T10:00:00Z); sin zona "
-            "horaria se interpreta como UTC. Convertir a este formato las expresiones relativas del "
-            "usuario ('hoy', 'en la última hora')."
-        )
-    ),
-]
-
-RangeEndParam = Annotated[
-    datetime,
-    Field(
-        description=(
-            "Fin del rango en formato ISO 8601; debe ser posterior al inicio. Si supera la hora "
-            "actual (por ejemplo al consultar 'hoy'), se recorta automáticamente al instante actual."
         )
     ),
 ]
@@ -91,20 +72,6 @@ def _format_duration(total_seconds: float) -> str:
     if seconds or not parts:
         parts.append(f"{seconds} s")
     return " ".join(parts)
-
-
-def _normalize_range(start: datetime, end: datetime) -> tuple[datetime, datetime, bool]:
-    start_dt, end_dt = as_utc(start), as_utc(end)
-    if start_dt >= end_dt:
-        raise ToolError("El inicio del rango tiene que ser anterior al fin.")
-
-    now_dt = datetime.now(timezone.utc)
-    if start_dt >= now_dt:
-        raise ToolError("El inicio del rango está en el futuro; indicar un período ya transcurrido.")
-
-    clamped = end_dt > now_dt
-    effective_end = now_dt if clamped else end_dt
-    return start_dt, effective_end, clamped
 
 
 async def _query_switch_summary(
@@ -229,7 +196,7 @@ async def get_switch_on_duration(
     directamente.
     """
     device_id = await _switch(device_id)
-    start_dt, effective_end, _ = _normalize_range(start, end)
+    start_dt, effective_end, _ = normalize_past_range(start, end)
     summary = await _query_switch_summary(ctx, device_id, start_dt, effective_end)
 
     rango = (
@@ -259,7 +226,7 @@ async def count_switch_toggles(
     directamente.
     """
     device_id = await _switch(device_id)
-    start_dt, effective_end, _ = _normalize_range(start, end)
+    start_dt, effective_end, _ = normalize_past_range(start, end)
     summary = await _query_switch_summary(ctx, device_id, start_dt, effective_end)
 
     rango = (
