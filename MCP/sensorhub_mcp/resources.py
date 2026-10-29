@@ -27,7 +27,12 @@ DEVICE_TYPES = [
         "device_type": "switch",
         "descripcion": "Actuador de relé, por ejemplo una luz, con confirmación física del estado.",
         "mide": ["state (on/off)"],
-        "tools": [],
+        "tools": [
+            "set_switch_state",
+            "get_switch_state",
+            "get_switch_on_duration",
+            "count_switch_toggles",
+        ],
     },
 ]
 

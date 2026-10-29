@@ -4,6 +4,10 @@ Las funciones de consulta reciben el cliente compartido que crea el lifespan
 del servidor (mcp_app.py) y son síncronas: las tools las ejecutan en un hilo
 aparte para no bloquear el bucle de eventos del servidor."""
 
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
+
 from influxdb_client import InfluxDBClient
 
 from .config import INFLUXDB_BUCKET, INFLUXDB_ORG, INFLUXDB_TOKEN, INFLUXDB_URL
@@ -82,3 +86,130 @@ def query_field_aggregate(
             time_str = t.strftime("%Y-%m-%d %H:%M:%S UTC") if t is not None else None
             return record.get_value(), time_str
     return None, None
+
+
+def _flux_rfc3339(moment: datetime) -> str:
+    """Formatea un datetime en UTC como literal RFC 3339 para Flux, conservando
+    subsegundos si los tiene (InfluxDB almacena con precisión de milisegundos)."""
+    utc_dt = moment.astimezone(timezone.utc) if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
+    return utc_dt.isoformat().replace("+00:00", "Z")
+
+
+@dataclass
+class StateRangeSummary:
+    """Resumen de transiciones y permanencia en estado activo sobre [start, end],
+    reutilizable entre dispositivos discretos (switch on/off, pir motion true/false;
+    ver wiki 06 secciones 3.3 y 4)."""
+
+    had_data: bool
+    prior_active: Optional[bool]
+    currently_active: Optional[bool]
+    activations: int
+    deactivations: int
+    active_seconds: float
+
+
+def query_state_series(
+    client: InfluxDBClient,
+    measurement: str,
+    field: str,
+    device_id: str,
+    start_dt: datetime,
+    stop_dt: datetime,
+    lookback_days: int = 30,
+) -> tuple[Any, list[tuple[datetime, Any]]]:
+    """Obtiene el estado vigente al inicio del rango (último punto anterior a
+    `start_dt`, mirando hasta `lookback_days` hacia atrás) y la serie ordenada
+    cronológicamente de puntos `(timestamp_utc, valor)` dentro de `[start_dt, stop_dt)`.
+
+    Consultar el estado previo evita dos errores clásicos en series orientadas a
+    eventos: reportar 0 s encendidos cuando el actuador se prendió antes de `start_dt`
+    y siguió prendido todo el rango sin emitir mensajes nuevos, o contar un
+    duplicado QoS 1 al comienzo del rango como si fuera una transición nueva."""
+    prior_start = _flux_rfc3339(start_dt - timedelta(days=lookback_days))
+    start_rfc3339 = _flux_rfc3339(start_dt)
+    # En Flux, `stop` es exclusivo; +1 ms incluye lecturas tomadas exactamente en `stop_dt`.
+    stop_rfc3339 = _flux_rfc3339(stop_dt + timedelta(milliseconds=1))
+
+    prior_query = f'''
+    from(bucket: "{INFLUXDB_BUCKET}")
+      |> range(start: {prior_start}, stop: {start_rfc3339})
+      |> filter(fn: (r) => r._measurement == "{measurement}")
+      |> filter(fn: (r) => r.device_id == "{device_id}")
+      |> filter(fn: (r) => r._field == "{field}")
+      |> last()
+    '''
+    prior_val = None
+    for table in client.query_api().query(prior_query, org=INFLUXDB_ORG):
+        for record in table.records:
+            prior_val = record.get_value()
+
+    range_query = f'''
+    from(bucket: "{INFLUXDB_BUCKET}")
+      |> range(start: {start_rfc3339}, stop: {stop_rfc3339})
+      |> filter(fn: (r) => r._measurement == "{measurement}")
+      |> filter(fn: (r) => r.device_id == "{device_id}")
+      |> filter(fn: (r) => r._field == "{field}")
+      |> sort(columns: ["_time"], desc: false)
+    '''
+    points: list[tuple[datetime, Any]] = []
+    for table in client.query_api().query(range_query, org=INFLUXDB_ORG):
+        for record in table.records:
+            points.append((record.get_time().astimezone(timezone.utc), record.get_value()))
+
+    return prior_val, points
+
+
+def summarize_binary_state_range(
+    prior_active: Optional[bool],
+    points: list[tuple[datetime, bool]],
+    start_dt: datetime,
+    end_dt: datetime,
+) -> StateRangeSummary:
+    """Recorre una secuencia cronológica de estados booleanos sobre `[start_dt, end_dt]`
+    contando transiciones reales (ignora repeticiones del mismo estado por reenvíos
+    idempotentes o QoS 1) y acumulando el tiempo total en estado activo."""
+    if prior_active is None and not points:
+        return StateRangeSummary(
+            had_data=False,
+            prior_active=None,
+            currently_active=None,
+            activations=0,
+            deactivations=0,
+            active_seconds=0.0,
+        )
+
+    current: Optional[bool] = prior_active
+    active_since: Optional[datetime] = start_dt if prior_active is True else None
+    activations = 0
+    deactivations = 0
+    active_seconds = 0.0
+
+    for raw_ts, is_active in points:
+        ts = min(max(raw_ts, start_dt), end_dt)
+        if is_active:
+            if current is not True:
+                activations += 1
+                current = True
+                active_since = ts
+        else:
+            if current is True:
+                deactivations += 1
+                if active_since is not None:
+                    active_seconds += max(0.0, (ts - active_since).total_seconds())
+                current = False
+                active_since = None
+            elif current is None:
+                current = False
+
+    if current is True and active_since is not None:
+        active_seconds += max(0.0, (end_dt - active_since).total_seconds())
+
+    return StateRangeSummary(
+        had_data=True,
+        prior_active=prior_active,
+        currently_active=current,
+        activations=activations,
+        deactivations=deactivations,
+        active_seconds=active_seconds,
+    )

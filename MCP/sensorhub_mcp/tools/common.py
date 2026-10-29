@@ -52,6 +52,20 @@ def read_only(title: str) -> ToolAnnotations:
     )
 
 
+# Las tools de comando sobre actuadores modifican el mundo físico (no son de
+# solo lectura y se marcan destructivas para que el cliente pueda pedir
+# confirmación, ver wiki 05 sección 3.2), pero fijar un estado explícito
+# ("on"/"off") es idempotente (wiki 03 sección 6) y opera en mundo cerrado.
+def actuator_command(title: str) -> ToolAnnotations:
+    return ToolAnnotations(
+        title=title,
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+
+
 async def run_blocking(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     """Ejecuta una función bloqueante (MQTT, InfluxDB, lectura del registro) en
     un hilo aparte: si se llamara directo, mientras espera el servidor no

@@ -17,6 +17,7 @@ services:
     entrypoint: ["/docker-entrypoint.sh"]
     command: ["/opt/emqx/bin/emqx", "foreground"]
     environment:
+      - EMQX_NODE_NAME=emqx@127.0.0.1
       - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD__DEFAULT_USERNAME:-admin}
       - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD__DEFAULT_PASSWORD:-admin}
       - INFLUXDB_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN:-sensorhub_admin_secret_token_123}

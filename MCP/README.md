@@ -16,7 +16,7 @@ MCP/
     ├── config.py            # Variables de entorno
     ├── mcp_app.py            # Instancia de MCPServer: lifespan, instrucciones, opciones de transporte y seguridad HTTP
     ├── resources.py          # Resource sensorhub://device-types
-    ├── mqtt_client.py        # Lectura de mensajes retenidos por MQTT
+    ├── mqtt_client.py        # Lectura de mensajes retenidos y envío de comandos por MQTT
     ├── influx_client.py      # Consultas Flux a InfluxDB
     ├── devices.py            # Registro y resolución de device_id
     ├── timeutils.py          # Zona horaria y formato de fechas para Flux
@@ -146,4 +146,4 @@ Eso da una URL pública (`https://<algo>.ngrok-free.app`). Del lado del cliente 
 
 El servidor valida los encabezados `Host` y `Origin` (protección contra *DNS rebinding*), así que antes hay que agregar ese dominio en `.env`: `MCP_ALLOWED_HOSTS=...,<algo>.ngrok-free.app` y `MCP_ALLOWED_ORIGINS=...,https://<algo>.ngrok-free.app`. Si no, el servidor responde 421 o 403.
 
-**Antes de hacerlo:** las credenciales que usa el servidor (token de InfluxDB, etc.) son las de desarrollo documentadas en [`../Stack/README.md`](../Stack/README.md) — no son secretas, pero tampoco hay que dejar el túnel abierto más tiempo del que dura la prueba, porque cualquiera con la URL puede invocar las tools (incluida `set_switch_state`, el día que exista) mientras el túnel esté activo.
+**Antes de hacerlo:** las credenciales que usa el servidor (token de InfluxDB, etc.) son las de desarrollo documentadas en [`../Stack/README.md`](../Stack/README.md) — no son secretas, pero tampoco hay que dejar el túnel abierto más tiempo del que dura la prueba, porque cualquiera con la URL puede invocar las tools (incluida `set_switch_state`) mientras el túnel esté activo.

@@ -6,6 +6,6 @@ registrada aunque el código exista.
 
 """
 
-from . import climate, device_resolution  # noqa: F401
+from . import climate, device_resolution, switch  # noqa: F401
 
 # common.py no registra tools: contiene tipos y helpers compartidos.
