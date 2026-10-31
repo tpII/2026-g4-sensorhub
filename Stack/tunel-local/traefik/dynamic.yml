@@ -6,9 +6,12 @@
 
 http:
   routers:
-    # MCP: HTTPS terminado acá, HTTP plano hacia el contenedor
+    # MCP: HTTPS terminado acá, HTTP plano hacia el contenedor. Además del
+    # endpoint MCP pasan las rutas de OAuth que sirve el mismo servidor:
+    # metadatos (/.well-known/oauth-*), /authorize, /token, /register y el login.
+    # La regla va en una sola línea: Traefik no acepta saltos de línea adentro.
     mcp:
-      rule: 'Host(`{{ env "MCP_DOMAIN" }}`) && PathPrefix(`{{ env "MCP_HTTP_PATH" }}`)'
+      rule: 'Host(`{{ env "MCP_DOMAIN" }}`) && (PathPrefix(`{{ env "MCP_HTTP_PATH" }}`) || PathPrefix(`/.well-known/oauth-`) || Path(`/authorize`) || Path(`/token`) || Path(`/register`) || Path(`/oauth/login`))'
       entryPoints:
         - websecure
       service: mcp

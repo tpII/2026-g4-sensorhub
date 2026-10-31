@@ -42,3 +42,15 @@ def _csv_list(value: str) -> list[str]:
 # su dominio a ambas listas.
 MCP_ALLOWED_HOSTS = _csv_list(os.getenv("MCP_ALLOWED_HOSTS", "localhost:*,127.0.0.1:*,sensorhub_mcp:*"))
 MCP_ALLOWED_ORIGINS = _csv_list(os.getenv("MCP_ALLOWED_ORIGINS", "http://localhost:*,http://127.0.0.1:*"))
+
+# Autenticación OAuth 2.1 de un solo usuario (paquete auth/). Activada por
+# defecto: con "false" el servidor queda abierto, solo para desarrollo local.
+MCP_AUTH_ENABLED = os.getenv("MCP_AUTH_ENABLED", "true").strip().lower() in ("1", "true", "yes")
+# URL pública del servidor, sin path (p. ej. https://mcp.ejemplo.com): es el
+# issuer de OAuth y, junto con MCP_HTTP_PATH, el recurso que protegen los tokens.
+MCP_PUBLIC_URL = os.getenv("MCP_PUBLIC_URL", "").strip().rstrip("/")
+# Contraseña de la pantalla de login. Cambiarla invalida todos los tokens emitidos.
+MCP_AUTH_PASSWORD = os.getenv("MCP_AUTH_PASSWORD", "")
+# Clave para firmar los tokens y los clientes registrados (aleatoria, larga y
+# distinta de la contraseña). Cambiarla obliga a volver a crear los conectores.
+MCP_AUTH_SECRET = os.getenv("MCP_AUTH_SECRET", "")

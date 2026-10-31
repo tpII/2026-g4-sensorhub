@@ -26,6 +26,11 @@ services:
       - MCP_STATELESS_HTTP=${MCP_STATELESS_HTTP:-false}
       - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*,sensorhub_mcp:*}
       - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
+      # Autenticación OAuth 2.1 de un solo usuario (ver .env.example)
+      - MCP_AUTH_ENABLED=${MCP_AUTH_ENABLED:-true}
+      - MCP_PUBLIC_URL=${MCP_PUBLIC_URL:-}
+      - MCP_AUTH_PASSWORD=${MCP_AUTH_PASSWORD:-}
+      - MCP_AUTH_SECRET=${MCP_AUTH_SECRET:-}
     networks:
       - sensorhub_network
 
@@ -50,6 +55,9 @@ services:
       - mcp_inspector_data:/home/node/.mcp-inspector
     networks:
       - sensorhub_network
+    extra_hosts:
+      - "${MCP_PUBLIC_HOST:-mcp.localhost}:${MCP_PUBLIC_HOST_IP:-127.0.0.1}"
+
 
 volumes:
   mcp_inspector_data:
