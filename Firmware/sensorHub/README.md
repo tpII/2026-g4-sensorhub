@@ -18,6 +18,8 @@ Firmwares/sensorHub/
     ├── idf_component.yml          # Dependencias oficiales (esp-idf-lib/dht)
     ├── CMakeLists.txt             # Registro de fuentes y carpetas de include
     ├── app_config.h               # Configuración transversal del sistema (WiFi, MQTT, Dominios)
+    ├── secrets.h.example          # Plantilla de credenciales (WiFi y contraseña MQTT)
+    ├── secrets.h                  # Credenciales reales (ignorado por Git, se crea desde el .example)
     ├── main.c                     # Orquestador del sistema
     ├── system_mgr.h / .c          # NVS, identidad de hardware (MAC) y generador de tópicos
     ├── wifi_mgr.h / .c            # Manejador de WiFi STA con auto-reconexión y eventos
@@ -39,21 +41,29 @@ Firmwares/sensorHub/
 
 Este archivo contiene exclusivamente parámetros globales y de red, independientes del sensor o actuador utilizado.
 
+Las credenciales (`CONFIG_WIFI_SSID`, `CONFIG_WIFI_PASS` y `CONFIG_MQTT_PASSWORD`) no van en `app_config.h` sino en `main/secrets.h`, que Git ignora y que `app_config.h` incluye. Antes de compilar por primera vez:
+
+```bash
+cp main/secrets.h.example main/secrets.h   # y completar las tres credenciales
+```
+
+Si falta, la compilación se detiene con un error que lo indica.
+
 | Parámetro | Valores Posibles | Descripción |
 | :--- | :--- | :--- |
-| **`CONFIG_WIFI_SSID`** | String (ej: `"MiWiFi"`) | Nombre de la red WiFi 2.4 GHz. |
-| **`CONFIG_WIFI_PASS`** | String | Contraseña de la red WiFi. |
+| **`CONFIG_WIFI_SSID`** | String (ej: `"MiWiFi"`) | Nombre de la red WiFi 2.4 GHz. Va en `secrets.h`. |
+| **`CONFIG_WIFI_PASS`** | String | Contraseña de la red WiFi. Va en `secrets.h`. |
 | **`CONFIG_WIFI_MAX_TX_POWER`** | `0` o `8`–`84` (unidades de 0,25 dBm) | Límite de potencia de transmisión WiFi. `0` = sin límite (default). En placas ESP32-C3 SuperMini clon que no logran conectar (log `Desconectado (reason=2)`, *AUTH_EXPIRE*), bajarla a `44` (11 dBm) o `34` (8,5 dBm) suele resolverlo, a costa de algo de alcance. |
-| **`CONFIG_SELECTED_PROTOCOL`** | `PROTOCOL_MQTT`<br>`PROTOCOL_MQTTS`<br>`PROTOCOL_WS`<br>`PROTOCOL_WSS` | Protocolo de transporte MQTT:<br>• `PROTOCOL_MQTT`: TCP plano (puerto 1883)<br>• `PROTOCOL_MQTTS`: TLS / SSL (puerto 8883)<br>• `PROTOCOL_WS`: WebSockets (puerto 8083)<br>• `PROTOCOL_WSS`: WebSockets Seguro (puerto 8084) |
+| **`CONFIG_SELECTED_PROTOCOL`** | `PROTOCOL_MQTT`<br>`PROTOCOL_MQTTS`<br>`PROTOCOL_WS`<br>`PROTOCOL_WSS` | Protocolo de transporte MQTT:<br>• `PROTOCOL_MQTT`: TCP plano (puerto 1883)<br>• `PROTOCOL_MQTTS`: TLS / SSL (puerto 443, acceso público por el dominio; ver [Stack/tunel-local](../../Stack/tunel-local/README.md))<br>• `PROTOCOL_WS`: WebSockets (puerto 8083)<br>• `PROTOCOL_WSS`: WebSockets Seguro (puerto 8084) |
 | **`CONFIG_NTP_SERVER`** | String (default: `"pool.ntp.org"`) | Servidor SNTP para sincronizar la hora del campo `ts`. Si no responde, los payloads se envían sin `ts` hasta sincronizar. |
 | **`CONFIG_STATUS_LED_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | LED de estado, definido por chip:<br>• `GPIO_NUM_8` en ESP32-C3 SuperMini (LED azul integrado).<br>• `GPIO_NUM_2` en ESP32 DevKit (LED azul integrado).<br>• `GPIO_NUM_NC` (deshabilitado) en S2/S3/C6/H2, cuyas placas traen un LED RGB direccionable.<br>Sin WiFi parpadea 1 vez por segundo; al conectar hace 3 parpadeos en ~1 s; cada mensaje MQTT enviado o recibido produce un destello corto. En los nodos `switch` se deshabilita si coincide con `CONFIG_SWITCH_PIN`. |
 | **`CONFIG_STATUS_LED_ACTIVE_LEVEL`** | `1` o `0` | Nivel que enciende el LED de estado: `0` en el C3 SuperMini (*active-low*), `1` en el ESP32 DevKit. |
-| **`CONFIG_BROKER_HOST`** | String (ej: `"broker.emqx.io"`) | Host o IP del broker MQTT. |
+| **`CONFIG_BROKER_HOST`** | String (ej: `"mqtt.sensorhub.wgr.com.ar"`) | Host del broker MQTT. Con MQTTS tiene que ser el dominio (no una IP), porque el certificado y el ruteo por SNI dependen del nombre. |
 | **`CONFIG_WS_PATH`** | String (ej: `"/mqtt"`) | Path para conexiones WebSockets. |
 | **`CONFIG_MQTT_TOPIC_PREFIX`** | String (default: `"sensorhub"`) | Espacio de nombres raíz para todos los tópicos. |
-| **`CONFIG_DEVICE_TYPE`** | `"dht"`, `"pir"`, `"switch"` | **Tipo de dispositivo a compilar**. Define qué driver y tarea se activan. |
-| **`CONFIG_MQTT_USERNAME`** | String | Usuario del broker MQTT (opcional). |
-| **`CONFIG_MQTT_PASSWORD`** | String | Contraseña del broker MQTT (opcional). |
+| **`CONFIG_DEVICE_TYPE`** | `"dht"`, `"pir"`, `"switch"` | **Tipo de dispositivo a compilar**. Define qué driver y tarea se activan. No tiene valor por defecto: se pasa desde el build (`-DDEVICE_TYPE=...` o la variable de entorno `DEVICE_TYPE`); si falta, la compilación se detiene con un error. |
+| **`CONFIG_MQTT_USERNAME`** | String (default: `"esp"`) | Usuario del broker MQTT, compartido por todos los dispositivos (`MQTT_ESP_USERNAME` de `Stack/.env`). |
+| **`CONFIG_MQTT_PASSWORD`** | String | Contraseña del usuario anterior (`MQTT_ESP_PASSWORD` de `Stack/.env`). Va en `secrets.h`. |
 
 NOTA sobre WS: El proyecto utiliza MQTT sobre TCP. El cliente esp-mqtt también soporta MQTT sobre WebSocket, por lo que se dejó la opción seleccionable aquí y el broker tiene habilitado el listener correspondiente. WS debería funcionar sin cambios adicionales, aunque no fue probado. WSS (al igual que MQTTS) requiere configurar en el firmware la CA del broker, ya que actualmente se valida contra el bundle de CAs públicas.
 
@@ -184,8 +194,8 @@ Para añadir un nuevo sensor o actuador (por ejemplo, un sensor ultrasónico `"s
 3. **Registrar en `main/CMakeLists.txt`:**
    Agregar `devices/sonar_device.c` a la lista de `SRCS`.
 
-4. **Seleccionar el dispositivo en `main/app_config.h`:**
+4. **Compilar indicando el nuevo tipo:**
 
-   ```c
-   #define CONFIG_DEVICE_TYPE "sonar"
+   ```bash
+   idf.py -DDEVICE_TYPE=sonar build
    ```

@@ -40,7 +40,7 @@ Los parametros se indican antes del comando `docker compose`. Las opciones dispo
 | `TARGET` | `esp32`, `esp32s2`, `esp32s3`, `esp32c3`, `esp32c6`, etc. | `esp32` |
 | `PORT` | `/dev/ttyUSB0` o `/dev/ttyACM0` | `/dev/ttyUSB0` |
 | `BAUD` | Velocidad del monitor serial | `115200` |
-| `DEVICE_TYPE` | `dht`, `pir` o `switch` | vacio en Compose; el firmware usa `dht` |
+| `DEVICE_TYPE` | `dht`, `pir` o `switch` | sin default: obligatorio para `flasher` y `build` |
 | `PROJECT_DIR` | Ruta al proyecto montado | `../sensorHub` |
 | `IDF_IMAGE` | Imagen Docker de ESP-IDF | `espressif/idf:v5.5.6` |
 

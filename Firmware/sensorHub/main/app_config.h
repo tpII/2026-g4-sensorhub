@@ -8,9 +8,13 @@
 // Configuración General de la Aplicación y Conectividad (Agnóstica del Hardware)
 // =============================================================================
 
-// --- Credenciales WiFi ---
-#define CONFIG_WIFI_SSID                "<ssid>"
-#define CONFIG_WIFI_PASS                "<passwd>"
+// --- Credenciales (WiFi y contraseña MQTT) ---
+// Viven en secrets.h, ignorado por Git: copiar secrets.h.example y completarlo.
+#if __has_include("secrets.h")
+    #include "secrets.h"
+#else
+    #error "Falta main/secrets.h: copiar main/secrets.h.example a main/secrets.h y completar las credenciales"
+#endif
 
 // Limite de potencia de transmision WiFi, en unidades de 0,25 dBm (rango 8..84; ej: 44 = 11 dBm, 34 = 8,5 dBm).
 // 0 = sin limite (maximo del chip, ~20 dBm). Algunas placas ESP32-C3 SuperMini clon no logran
@@ -19,24 +23,27 @@
 
 // --- Selección de Protocolo MQTT ---
 #define PROTOCOL_MQTT                   0   // TCP: mqtt://host:1883
-#define PROTOCOL_MQTTS                  1   // SSL/TLS: mqtts://host:8883
+#define PROTOCOL_MQTTS                  1   // SSL/TLS: mqtts://host:443 (acceso público: Traefik termina el TLS)
 #define PROTOCOL_WS                     2   // WebSocket: ws://host:8083/mqtt
 #define PROTOCOL_WSS                    3   // WebSocket Seguro: wss://host:8084/mqtt
 
 // Modificar aquí el protocolo deseado:
-#define CONFIG_SELECTED_PROTOCOL        PROTOCOL_MQTT
+#define CONFIG_SELECTED_PROTOCOL        PROTOCOL_MQTTS
 
 // --- Sincronizacion horaria (SNTP) para el campo "ts" de los payloads ---
 #define CONFIG_NTP_SERVER               "pool.ntp.org"
 
 // --- Broker MQTT & Endpoints ---
-#define CONFIG_BROKER_HOST              "192.168.0.190"
+// Dominio público del broker (registro A en Cloudflare). Con MQTTS tiene que ser
+// el dominio y no una IP: el certificado y el ruteo por SNI dependen del nombre.
+// Para conectarse directo al broker en la LAN (MQTT sin TLS), usar su IP local.
+#define CONFIG_BROKER_HOST              "mqtt.sensorhub.wgr.com.ar"
 #define CONFIG_WS_PATH                  "/mqtt"
 
 #if (CONFIG_SELECTED_PROTOCOL == PROTOCOL_MQTT)
     #define CONFIG_BROKER_URI           "mqtt://" CONFIG_BROKER_HOST ":1883"
 #elif (CONFIG_SELECTED_PROTOCOL == PROTOCOL_MQTTS)
-    #define CONFIG_BROKER_URI           "mqtts://" CONFIG_BROKER_HOST ":8883"
+    #define CONFIG_BROKER_URI           "mqtts://" CONFIG_BROKER_HOST ":443"
 #elif (CONFIG_SELECTED_PROTOCOL == PROTOCOL_WS)
     #define CONFIG_BROKER_URI           "ws://" CONFIG_BROKER_HOST ":8083" CONFIG_WS_PATH
 #elif (CONFIG_SELECTED_PROTOCOL == PROTOCOL_WSS)
@@ -46,16 +53,16 @@
 // --- Jerarquía de Tópicos y Tipo de Dispositivo ---
 #define CONFIG_MQTT_TOPIC_PREFIX        "sensorhub"
 
-// Tipo a compilar ("dht", "pir", "switch", etc.).
-// Puede sobreescribirse desde el build vía -DDEVICE_TYPE=... o variable de entorno DEVICE_TYPE
+// Tipo a compilar ("dht", "pir", "switch", etc.): no tiene valor por defecto, lo
+// define el build vía -DDEVICE_TYPE=... o la variable de entorno DEVICE_TYPE
+// (ver main/CMakeLists.txt)
 #ifndef CONFIG_DEVICE_TYPE
-    #define CONFIG_DEVICE_TYPE          "dht"
+    #error "Falta DEVICE_TYPE: compilar con idf.py -DDEVICE_TYPE=<dht|pir|switch> build (o la variable de entorno DEVICE_TYPE)"
 #endif
 
-// Credenciales MQTT: el broker rechaza clientes sin usuario. Son las mismas para
-// todos los dispositivos: MQTT_ESP_USERNAME / MQTT_ESP_PASSWORD de Stack/.env
+// Usuario MQTT: el broker rechaza clientes sin usuario. Es el mismo para todos
+// los dispositivos: MQTT_ESP_USERNAME de Stack/.env (la contraseña está en secrets.h)
 #define CONFIG_MQTT_USERNAME            "esp"
-#define CONFIG_MQTT_PASSWORD            "<mqtt_esp_password>"
 
 // --- LED de estado (sin WiFi: parpadeo cada 1 s; al conectar: 3 parpadeos; actividad MQTT: destello) ---
 // Pin y nivel activo del LED integrado de cada placa. GPIO_NUM_NC deshabilita el LED de estado.

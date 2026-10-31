@@ -1,3 +1,13 @@
 # Opciones de Kconfig que el proyecto fija a proposito (solo las que difieren del default de ESP-IDF).
-# El sdkconfig se genera en cada build a partir de este archivo y no se versiona.
+# El sdkconfig se genera a partir de este archivo solo cuando no existe (o al cambiar
+# el target) y no se versiona: después de modificar este archivo, borrar sdkconfig.
 # El target (esp32, esp32c3, ...) no va aca: lo define TARGET en el docker-compose (idf.py set-target).
+
+# Bundle de CAs para MQTTS: solo las CAs más comunes (incluye ISRG Root X1, la raíz
+# de Let's Encrypt que valida el certificado del broker). El bundle completo no
+# entra en la partición de 1 MB de la app.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
+
+# Tabla de particiones con una sola app de 1,5 MB (la default es de 1 MB y con
+# TLS para MQTTS quedaba casi llena). Entra en el flash de 2 MB.
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y

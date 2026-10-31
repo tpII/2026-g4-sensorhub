@@ -21,11 +21,15 @@ services:
           echo 'ERROR: No se encontro un dispositivo serial en '$$PORT'. Verifique PORT y el mapeo USB.' >&2;
           exit 1;
         fi &&
+        if [ -z \"$$DEVICE_TYPE\" ]; then
+          echo 'ERROR: Falta DEVICE_TYPE (dht, pir o switch). Ej: DEVICE_TYPE=dht docker compose run --rm flasher' >&2;
+          exit 1;
+        fi &&
         if ! grep -q \"CONFIG_IDF_TARGET=\\\"$$TARGET\\\"\" sdkconfig 2>/dev/null; then
           echo '=== Configurando target: '$$TARGET' ===' &&
           idf.py set-target $$TARGET;
         fi &&
-        echo '=== Compilando firmware (Target: '$$TARGET', Device: '$${DEVICE_TYPE:-dht}') ===' &&
+        echo '=== Compilando firmware (Target: '$$TARGET', Device: '$$DEVICE_TYPE') ===' &&
         idf.py fullclean build &&
         echo '=== Flasheando en '$$PORT' ===' &&
         idf.py -p $$PORT flash
@@ -78,6 +82,10 @@ services:
       - DEVICE_TYPE=${DEVICE_TYPE:-}
     command: >
       bash -c "
+        if [ -z \"$$DEVICE_TYPE\" ]; then
+          echo 'ERROR: Falta DEVICE_TYPE (dht, pir o switch). Ej: DEVICE_TYPE=dht docker compose run --rm build' >&2;
+          exit 1;
+        fi &&
         if ! grep -q \"CONFIG_IDF_TARGET=\\\"$$TARGET\\\"\" sdkconfig 2>/dev/null; then
           echo '=== Configurando target: '$$TARGET' ===' &&
           idf.py set-target $$TARGET;
