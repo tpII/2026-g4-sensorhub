@@ -1,31 +1,38 @@
 name: sensorhub_sv_publico
 services:
-  # Servidor WireGuard: es el dueño del namespace de red y publica los puertos.
-  # 443/tcp lo atiende nginx (comparte este namespace), 51820/udp es el túnel.
-  wireguard:
-    build: ./wireguard
-    container_name: sensorhub_wg_publico
+  # Cliente Tailscale: dueño del namespace de red y publica los puertos.
+  # 443/tcp lo atiende nginx (comparte este namespace), 41641/udp es para que
+  # las PCs con servicios conecten directo en vez de pasar por los relays (DERP).
+  # Modo kernel: nginx necesita salir por la interfaz tailscale0.
+  tailscale:
+    image: ${TAILSCALE_IMAGE:-tailscale/tailscale:v1.104.4}
+    container_name: sensorhub_ts_publico
+    hostname: ${TS_HOSTNAME:-toshi}
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
       - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
     ports:
-      - "443:443/tcp"                            # Dominios de rutas.conf, ruteados por SNI
-      - "${WG_LISTEN_PORT:-51820}:${WG_LISTEN_PORT:-51820}/udp"  # Túnel WireGuard
+      - "443:443/tcp"       # Dominios de rutas.conf, ruteados por SNI
+      - "41641:41641/udp"   # Conexiones directas de Tailscale
     environment:
-      - WG_PRIVATE_KEY=${WG_PRIVATE_KEY}
-      - WG_ADDRESS=${WG_ADDRESS:-10.13.13.1}
-      - WG_LISTEN_PORT=${WG_LISTEN_PORT:-51820}
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_HOSTNAME=${TS_HOSTNAME:-toshi}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+      - TS_TAILSCALED_EXTRA_ARGS=--port=41641
     volumes:
-      - ./peers.conf:/etc/sensorhub/peers.conf:ro
+      # Identidad del nodo: sin esto, cada recreación sería una máquina nueva
+      - tailscale_state:/var/lib/tailscale
     healthcheck:
-      # Sano si wg0 está arriba; el estado de cada máquina se ve con `wg show`
-      test: ["CMD", "wg", "show", "wg0"]
+      test: ["CMD", "tailscale", "status"]
       interval: 30s
       timeout: 5s
       retries: 3
 
-  # Router L4 por SNI: no descifra nada, solo reenvía el TLS por el túnel
+  # Router L4 por SNI: no descifra nada, solo reenvía el TLS por la tailnet
   nginx:
     build:
       context: ./nginx
@@ -33,11 +40,16 @@ services:
         NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.27.4-alpine}
     container_name: sensorhub_sni_router
     restart: unless-stopped
-    network_mode: "service:wireguard"
+    network_mode: "service:tailscale"
     depends_on:
-      - wireguard
+      - tailscale
     security_opt:
       - no-new-privileges:true
+    environment:
+      - TS_TAILNET=${TS_TAILNET:?Falta TS_TAILNET en .env}
     volumes:
-      - ./peers.conf:/etc/sensorhub/peers.conf:ro
       - ./rutas.conf:/etc/sensorhub/rutas.conf:ro
+
+volumes:
+  tailscale_state:
+    name: sensorhub_ts_publico_state

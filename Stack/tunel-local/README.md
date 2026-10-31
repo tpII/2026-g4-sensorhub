@@ -1,13 +1,13 @@
-# Exposición pública por túnel WireGuard
+# Exposición pública por Tailscale
 
-Publica el **servidor MCP** (HTTPS) y el **broker MQTT** (MQTTS) en internet sin hostearlos en el servidor público: ese servidor solo recibe el tráfico en el 443 y lo reenvía, cifrado, por un túnel WireGuard hasta esta PC, donde corre el stack.
+Publica el **servidor MCP** (HTTPS) y el **broker MQTT** (MQTTS) en internet sin hostearlos en el servidor público: ese servidor solo recibe el tráfico en el 443 y lo reenvía, cifrado, por una red privada de [Tailscale](https://tailscale.com) (*tailnet*) hasta esta PC, donde corre el stack.
 
 Se reparte en dos carpetas, una por máquina:
 
 | Carpeta | Dónde corre | Qué levanta |
 |---|---|---|
-| [`../sv-publico/`](../sv-publico/) | Servidor público | Servidor WireGuard + nginx (ruteo por SNI, sin descifrar) |
-| `tunel-local/` (esta) | Cada PC con servicios | Cliente WireGuard aislado + Traefik (termina TLS) |
+| [`../sv-publico/`](../sv-publico/) | Servidor público | Cliente Tailscale + nginx (ruteo por SNI, sin descifrar) |
+| `tunel-local/` (esta) | Cada PC con servicios | Cliente Tailscale sin privilegios + Traefik (termina TLS) |
 
 El servidor público puede atender a varias PCs, cada una con sus dominios (ver [Agregar otra PC](#agregar-otra-pc)).
 
@@ -18,14 +18,14 @@ flowchart LR
     ESP["ESP32<br/>mqtts://mqtt.dominio:443"]
     LLM["Cliente MCP<br/>https://mcp.dominio/mcp"]
 
-    subgraph PUB["Servidor público (443/tcp y 51820/udp)"]
+    subgraph PUB["Servidor público (443/tcp y 41641/udp)"]
         NGX["nginx stream<br/>ssl_preread (SNI)"]
-        WGS["wg0 10.13.13.1<br/>51820/udp"]
+        TSS["tailscale<br/>tag:sv-publico"]
     end
 
     subgraph LOCAL["PC local"]
-        subgraph NS["namespace aislado (wireguard + traefik)"]
-            WGC["wg0 10.13.13.2"]
+        subgraph NS["namespace (tailscale + traefik)"]
+            TSC["tailscale userspace<br/>tag:servicios"]
             TRK["Traefik :443<br/>TLS Let's Encrypt"]
         end
         EMQX["sensorhub_emqx:1883"]
@@ -34,42 +34,42 @@ flowchart LR
 
     ESP -->|"TLS 443/tcp"| NGX
     LLM -->|"TLS 443/tcp"| NGX
-    NGX -->|"TLS + PROXY protocol"| WGS
-    WGS ===|"túnel 51820/udp<br/>(lo abre la PC local)"| WGC
-    WGC --> TRK
+    NGX -->|"TLS + PROXY protocol<br/>a leno.tailnet:443"| TSS
+    TSS ===|"tailnet (WireGuard)"| TSC
+    TSC -->|"127.0.0.1:443"| TRK
     TRK -->|"MQTT plano"| EMQX
     TRK -->|"HTTP plano"| MCP
 ```
 
-- **El TLS se termina en esta PC**, no en el servidor público: el servidor público nunca ve el tráfico descifrado ni tiene los certificados. Solo lee el SNI del `ClientHello` para decidir si lo reenvía; cualquier otro dominio se corta ahí.
-- **Traefik** atiende los dos dominios en el mismo puerto: el router HTTP de `MCP_DOMAIN` descifra y reenvía a `sensorhub_mcp:8000` (solo bajo `/mcp`), y el router TCP de `MQTT_DOMAIN` descifra y le entrega MQTT plano a `sensorhub_emqx:1883`. Se eligió Traefik porque trae de fábrica el ruteo TCP por SNI, la terminación TLS y la emisión de certificados: Caddy necesita una imagen compilada con el plugin `caddy-l4` para el TCP, y nginx no gestiona certificados por su cuenta (requiere certbot y el puerto 80).
-- **Certificados** por TLS-ALPN-01: Let's Encrypt valida conectándose al mismo `443` con el SNI del dominio, nginx lo reenvía por el túnel como cualquier conexión y Traefik responde el desafío. No hace falta abrir el 80 ni dar credenciales de Cloudflare.
-- **IP real del cliente**: nginx la manda con PROXY protocol y Traefik solo la acepta si viene de `10.13.13.1`, así que aparece en los logs de Traefik.
+- **El TLS se termina en esta PC**, no en el servidor público: el servidor público nunca ve el tráfico descifrado ni tiene los certificados. Solo lee el SNI del `ClientHello` para decidir a qué PC reenviarlo; cualquier otro dominio se corta ahí.
+- **Tailscale** arma el túnel (WireGuard por debajo) y asigna solo las IPs (`100.x.y.z`) y los nombres. nginx encuentra cada PC por su nombre en la tailnet (`leno.<tailnet>.ts.net`), así que no hay IPs que administrar.
+- **Traefik** atiende los dos dominios en el mismo puerto: el router HTTP de `MCP_DOMAIN` descifra y reenvía a `sensorhub_mcp:8000` (solo bajo `/mcp`), y el router TCP de `MQTT_DOMAIN` descifra y le entrega MQTT plano a `sensorhub_emqx:1883`. Se eligió Traefik porque trae de fábrica el ruteo TCP por SNI, la terminación TLS y la emisión de certificados.
+- **Certificados** por TLS-ALPN-01: Let's Encrypt valida conectándose al mismo `443` con el SNI del dominio, nginx lo reenvía como cualquier conexión y Traefik responde el desafío. No hace falta abrir el 80.
+- **IP real del cliente**: nginx la manda con PROXY protocol y Traefik solo la acepta si la conexión viene de `127.0.0.1` (desde donde la entrega Tailscale), así que aparece en los logs de Traefik.
 
-### Aislamiento del contenedor del túnel
+### Quién puede llegar a qué
 
-El contenedor `wireguard` no usa `network_mode: host` ni el socket de Docker: tiene su propio namespace de red, conectado solo a `sensorhub_network`, y Traefik lo comparte (`network_mode: service:wireguard`). El `entrypoint.sh` aplica un firewall en ese namespace:
+- **Por la tailnet** solo pasa lo que permite la [política de acceso](../sv-publico/tailscale-policy.hujson): el servidor público (`tag:sv-publico`) puede llegar al `443` de las PCs con servicios (`tag:servicios`), y nada más. Las PCs no se ven entre sí ni pueden llegar al servidor público.
+- **En esta PC**, lo que entra al `443` lo recibe Traefik, que solo reenvía los dominios de [`traefik/dynamic.yml`](traefik/dynamic.yml). Un servicio que no está ahí (InfluxDB, el dashboard de EMQX) no se puede pedir desde afuera.
+- **El cliente Tailscale corre en modo *userspace***: sin `NET_ADMIN` ni `/dev/net/tun`, no crea interfaces ni toca la red del host. Tampoco publica puertos en el host.
 
-| Dirección | Permitido | Bloqueado |
-|---|---|---|
-| Entrada por el túnel | `443/tcp` desde `10.13.13.1` (Traefik) | todo lo demás |
-| Hacia `sensorhub_network` | EMQX y MCP (puertos `1883` y `8000`) | InfluxDB, dashboard de EMQX y demás |
-| Hacia el host | — | gateway del bridge, toda red privada (LAN, `docker0`, etc.), IPv6 |
-| Hacia internet | el túnel UDP y `443/tcp` (API de Let's Encrypt) | el resto |
-
-Así, aunque alguien comprometiera el servidor público, por el túnel solo llega a Traefik:443.
+Lo que no cubre: si Traefik o el cliente de Tailscale tuvieran una vulnerabilidad explotable, desde ese contenedor se alcanza todo `sensorhub_network` (InfluxDB incluido), igual que desde cualquier otro contenedor del stack.
 
 ## Puesta en marcha
 
-### 1. Claves de WireGuard
+### 1. Tailscale
 
-Hace falta un par de claves por máquina. Desde cualquier máquina con Docker:
+En el [panel de Tailscale](https://login.tailscale.com/admin):
 
-```bash
-docker run --rm alpine:3.20 sh -c 'apk add -q wireguard-tools && k=$(wg genkey) && echo "privada: $k" && echo "pública: $(echo $k | wg pubkey)"'
-```
+1. **Access controls:** reemplazar la política por la de [`../sv-publico/tailscale-policy.hujson`](../sv-publico/tailscale-policy.hujson). Define los tags `tag:sv-publico` y `tag:servicios` y qué puede hablar con qué.
+2. **DNS:** verificar que **MagicDNS** esté habilitado y anotar el *Tailnet name* (`tailXXXX.ts.net`); va en `TS_TAILNET` del servidor público.
+3. **Settings → Keys → Generate auth key**, una por máquina:
+   - para el servidor público, con el tag `tag:sv-publico`;
+   - para cada PC con servicios, con el tag `tag:servicios`.
 
-Correrlo dos veces (una por máquina). Cada máquina lleva su **propia** clave privada en su `.env`. La pública del servidor va en `WG_PEER_PUBLIC_KEY` de esta PC, y la pública de esta PC va en `sv-publico/peers.conf`.
+   Sin marcar *Reusable* ni *Ephemeral*. La key solo se usa en el primer arranque: después la identidad del nodo queda guardada en un volumen de Docker. Los dispositivos con tag no vencen, así que no hay que volver a autenticarlos.
+
+Las auth keys son credenciales: con una, cualquiera puede sumar una máquina a la tailnet con ese tag. Van solo en el `.env` (ignorado por Git) y, una vez usadas, conviene revocarlas desde el panel.
 
 ### 2. DNS en Cloudflare
 
@@ -86,14 +86,14 @@ Con la nube naranja Cloudflare intenta terminar el TLS él mismo: MQTT no es HTT
 
 Ver [`../sv-publico/README.md`](../sv-publico/README.md).
 
-### 4. Esta PC
+### 4. SV donde corren los servicios
 
 Con el stack ya levantado (la red `sensorhub_network` tiene que existir):
 
 ```bash
 cd Stack/tunel-local
-cp .env.example .env    # completar dominios, WG_ENDPOINT, claves y ACME_EMAIL
-docker compose up -d --build
+cp .env.example .env    # completar dominios, TS_AUTHKEY, TS_HOSTNAME y ACME_EMAIL
+docker compose up -d
 docker compose logs -f
 ```
 
@@ -109,43 +109,40 @@ y recrear el contenedor del MCP (`docker compose up -d` en `MCP/`).
 ### 5. Verificar
 
 ```bash
-docker exec sensorhub_wg_local wg show          # "latest handshake" de hace segundos
-docker compose ps                               # wireguard (healthy)
-curl -I https://mcp.ejemplo.com/mcp             # responde el MCP (405/406 es normal sin cuerpo)
+docker exec sensorhub_ts_local tailscale status   # aparecen leno y toshi
+docker compose ps                                 # tailscale (healthy)
+curl -I https://mcp.ejemplo.com/mcp               # responde el MCP (405/406 es normal sin cuerpo)
 openssl s_client -connect mqtt.ejemplo.com:443 -servername mqtt.ejemplo.com </dev/null | head
 ```
 
-Los certificados se piden al arrancar Traefik, así que el servidor público y el túnel tienen que estar arriba y el DNS ya apuntando a la IP pública. Si falló (se ve en `docker compose logs traefik`), Traefik reintenta solo; las renovaciones se hacen 30 días antes del vencimiento, con lo que una caída corta del túnel no llega a dejar un certificado vencido.
+Los certificados se piden al arrancar Traefik, así que el servidor público y la tailnet tienen que estar arriba y el DNS ya apuntando a la IP pública. Si falló (se ve en `docker compose logs traefik`), Traefik reintenta solo; las renovaciones se hacen 30 días antes del vencimiento, con lo que una caída corta no llega a dejar un certificado vencido.
 
 ## Agregar otra PC
 
 Para publicar servicios de otra PC por el mismo servidor (en el ejemplo, `pc-2` con `mcp2.ejemplo.com` y `mqtt2.ejemplo.com`):
 
-1. En la PC nueva, copiar esta carpeta y generar un par de claves nuevo.
-2. En el servidor público, agregarla a `peers.conf` con una IP libre y sus dominios a `rutas.conf` (ver [`../sv-publico/README.md`](../sv-publico/README.md#agregar-una-máquina)):
-
-   ```text
-   # peers.conf
-   pc-2    <clave pública de pc-2>    10.13.13.3
-
-   # rutas.conf
-   mcp2.ejemplo.com     pc-2
-   mqtt2.ejemplo.com    pc-2
-   ```
-
-3. Crear los registros `A` de `mcp2` y `mqtt2` en Cloudflare (nube gris).
-4. En la PC nueva, el `.env` de `tunel-local` cambia en:
+1. Generar una auth key con `tag:servicios`.
+2. En la PC nueva, copiar esta carpeta. Su `.env` cambia en:
 
    ```env
    MCP_DOMAIN=mcp2.ejemplo.com
    MQTT_DOMAIN=mqtt2.ejemplo.com
-   WG_ADDRESS=10.13.13.3
-   WG_PRIVATE_KEY=<clave privada de pc-2>
+   TS_AUTHKEY=<auth key nueva>
+   TS_HOSTNAME=pc-2
    ```
 
-   `WG_ENDPOINT`, `WG_PEER_PUBLIC_KEY` y `WG_PEER_ADDRESS` son los mismos que en esta PC: todas apuntan al mismo servidor.
+3. En el servidor público, agregar sus dominios a `rutas.conf` y reiniciar nginx (ver [`../sv-publico/README.md`](../sv-publico/README.md#agregar-una-máquina)):
 
-[`traefik/dynamic.yml`](traefik/dynamic.yml) reenvía a `sensorhub_mcp:8000` y `sensorhub_emqx:1883`. Si la otra PC corre el mismo stack no hay que tocarlo; si corre otros servicios, ajustar ahí los destinos y `ALLOWED_PORTS` en el servicio `wireguard`.
+   ```text
+   mcp2.ejemplo.com     pc-2
+   mqtt2.ejemplo.com    pc-2
+   ```
+
+4. Crear los registros `A` de `mcp2` y `mqtt2` en Cloudflare (nube gris).
+
+No hay IPs ni claves que copiar entre máquinas: Tailscale asigna la IP y nginx encuentra la PC por su `TS_HOSTNAME`.
+
+[`traefik/dynamic.yml`](traefik/dynamic.yml) reenvía a `sensorhub_mcp:8000` y `sensorhub_emqx:1883`. Si la otra PC corre el mismo stack no hay que tocarlo; si corre otros servicios, ajustar ahí los destinos.
 
 ## Cambios en los clientes
 
@@ -161,6 +158,6 @@ Tal como está el stack, **cualquiera en internet podría usarlo**:
 
 ## Notas
 
-- Si el contenedor `wireguard` se reinicia, el namespace de red se recrea y Traefik queda sin red: hay que reiniciarlo también (`docker compose up -d --force-recreate traefik`).
+- Si el contenedor `tailscale` se recrea, el namespace de red cambia y Traefik queda sin red: hay que recrearlo también (`docker compose up -d --force-recreate traefik`).
+- Si se borra el volumen `sensorhub_ts_local_state`, la PC aparece como una máquina nueva: hace falta una auth key nueva y borrar la vieja del panel (si no, la nueva queda como `leno-1` y nginx no la encuentra).
 - Traefik tiene `readTimeout=0` en el entrypoint para no cortar conexiones MQTT de larga duración; las conexiones sin tráfico durante 1 h las corta nginx en el servidor público (el keepalive MQTT de los ESP lo evita).
-- Para cambiar los puertos permitidos dentro de `sensorhub_network`, definir `ALLOWED_PORTS` (por defecto `1883,8000`) en el servicio `wireguard`.

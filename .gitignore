@@ -13,6 +13,5 @@
 *.log
 **/__pycache__
 
-# Tablas del servidor público (se versionan los .example)
-Stack/sv-publico/peers.conf
+# Tabla de rutas del servidor público (se versiona el .example)
 Stack/sv-publico/rutas.conf

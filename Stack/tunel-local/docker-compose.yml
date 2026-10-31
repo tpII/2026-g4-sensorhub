@@ -1,40 +1,39 @@
 name: sensorhub_tunel
 services:
-  # Cliente WireGuard: dueño del namespace de red que comparte con Traefik.
-  # Sin network_mode: host ni socket de Docker; solo ve sensorhub_network y su
-  # firewall (ver wireguard/entrypoint.sh) le cierra el acceso al host.
-  wireguard:
-    build: ./wireguard
-    container_name: sensorhub_wg_local
+  # Cliente Tailscale en modo userspace: sin NET_ADMIN ni /dev/net/tun, no
+  # toca la red del host. Las conexiones que llegan por la tailnet las entrega
+  # a 127.0.0.1 de este namespace, donde escucha Traefik. Qué puede llegar lo
+  # decide la política de la tailnet (sv-publico/tailscale-policy.hujson).
+  tailscale:
+    image: ${TAILSCALE_IMAGE:-tailscale/tailscale:v1.104.4}
+    container_name: sensorhub_ts_local
+    hostname: ${TS_HOSTNAME:-leno}
     restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
     environment:
-      - WG_PRIVATE_KEY=${WG_PRIVATE_KEY}
-      - WG_PEER_PUBLIC_KEY=${WG_PEER_PUBLIC_KEY}
-      - WG_ENDPOINT=${WG_ENDPOINT}
-      - WG_ADDRESS=${WG_ADDRESS:-10.13.13.2}
-      - WG_PEER_ADDRESS=${WG_PEER_ADDRESS:-10.13.13.1}
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_HOSTNAME=${TS_HOSTNAME:-leno}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=true
+    volumes:
+      # Identidad del nodo: sin esto, cada recreación sería una máquina nueva
+      - tailscale_state:/var/lib/tailscale
     healthcheck:
-      # Sano si hubo handshake con el servidor público en los últimos 3 minutos
-      test: ["CMD-SHELL", "t=$$(wg show wg0 latest-handshakes | awk '{print $$2}'); [ -n \"$$t\" ] && [ $$(( $$(date +%s) - t )) -lt 180 ]"]
+      test: ["CMD", "tailscale", "status"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 30s
     networks:
       - sensorhub_network
 
   # Terminación TLS: MCP (HTTPS → HTTP) y MQTTS (TLS → TCP 1883), por SNI.
-  # Escucha en 10.13.13.2:443 dentro del túnel; no publica puertos en el host.
+  # Escucha en el 443 del namespace de Tailscale; no publica puertos en el host.
   traefik:
     image: ${TRAEFIK_IMAGE:-traefik:v3.3.5}
     container_name: sensorhub_traefik
     restart: unless-stopped
-    network_mode: "service:wireguard"
+    network_mode: "service:tailscale"
     depends_on:
-      - wireguard
+      - tailscale
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -46,8 +45,9 @@ services:
       - --accesslog=true
       - --providers.file.filename=/etc/traefik/dynamic.yml
       - --entrypoints.websecure.address=:443
-      # Solo nginx (del otro lado del túnel) puede declarar la IP real del cliente
-      - --entrypoints.websecure.proxyprotocol.trustedips=${WG_PEER_ADDRESS:-10.13.13.1}/32
+      # Tailscale (userspace) entrega las conexiones desde 127.0.0.1: solo ese
+      # origen puede declarar la IP real del cliente que manda nginx
+      - --entrypoints.websecure.proxyprotocol.trustedips=127.0.0.1/32
       # Sin límite de lectura: las conexiones MQTT quedan abiertas indefinidamente
       - --entrypoints.websecure.transport.respondingtimeouts.readtimeout=0
       # Certificados por TLS-ALPN-01: Let's Encrypt valida por el mismo 443
@@ -69,5 +69,7 @@ networks:
     external: true
 
 volumes:
+  tailscale_state:
+    name: sensorhub_ts_local_state
   traefik_acme:
     name: sensorhub_traefik_acme
