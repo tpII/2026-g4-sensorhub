@@ -1,0 +1,39 @@
+## ==============================================================================
+## SensorHub - Rutas de Traefik (proveedor file)
+## Los dominios se leen de las variables de entorno del contenedor (MCP_DOMAIN,
+## MQTT_DOMAIN) mediante el templating del proveedor file.
+## ==============================================================================
+
+http:
+  routers:
+    # MCP: HTTPS terminado acá, HTTP plano hacia el contenedor
+    mcp:
+      rule: 'Host(`{{ env "MCP_DOMAIN" }}`) && PathPrefix(`{{ env "MCP_HTTP_PATH" }}`)'
+      entryPoints:
+        - websecure
+      service: mcp
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    mcp:
+      loadBalancer:
+        servers:
+          - url: "http://sensorhub_mcp:8000"
+
+tcp:
+  routers:
+    # MQTTS: TLS terminado acá (por SNI), MQTT plano (TCP 1883) hacia EMQX
+    mqtt:
+      rule: 'HostSNI(`{{ env "MQTT_DOMAIN" }}`)'
+      entryPoints:
+        - websecure
+      service: emqx
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    emqx:
+      loadBalancer:
+        servers:
+          - address: "sensorhub_emqx:1883"

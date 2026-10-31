@@ -1,0 +1,12 @@
+# ==============================================================================
+# SensorHub - Máquinas conectadas al túnel
+# Copiar a peers.conf. Una línea por máquina: nombre, clave pública, IP.
+# - La IP queda atada a la clave: WireGuard descarta lo que llegue con esa
+#   clave desde otra IP, así que una máquina no puede tomar la IP de otra.
+# - La IP tiene que coincidir con WG_ADDRESS del tunel-local de esa máquina.
+# - El nombre es el que se usa en rutas.conf.
+# ==============================================================================
+
+# nombre    clave_pública                                   ip
+pc-local    REEMPLAZAR_CLAVE_PUBLICA_DE_PC_LOCAL=           10.13.13.2
+pc-2        REEMPLAZAR_CLAVE_PUBLICA_DE_PC_2=               10.13.13.3

@@ -12,3 +12,7 @@
 # Logs y temporales
 *.log
 **/__pycache__
+
+# Tablas del servidor público (se versionan los .example)
+Stack/sv-publico/peers.conf
+Stack/sv-publico/rutas.conf

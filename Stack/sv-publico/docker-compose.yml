@@ -1,0 +1,43 @@
+name: sensorhub_sv_publico
+services:
+  # Servidor WireGuard: es el dueño del namespace de red y publica los puertos.
+  # 443/tcp lo atiende nginx (comparte este namespace), 51820/udp es el túnel.
+  wireguard:
+    build: ./wireguard
+    container_name: sensorhub_wg_publico
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    ports:
+      - "443:443/tcp"                            # Dominios de rutas.conf, ruteados por SNI
+      - "${WG_LISTEN_PORT:-51820}:${WG_LISTEN_PORT:-51820}/udp"  # Túnel WireGuard
+    environment:
+      - WG_PRIVATE_KEY=${WG_PRIVATE_KEY}
+      - WG_ADDRESS=${WG_ADDRESS:-10.13.13.1}
+      - WG_LISTEN_PORT=${WG_LISTEN_PORT:-51820}
+    volumes:
+      - ./peers.conf:/etc/sensorhub/peers.conf:ro
+    healthcheck:
+      # Sano si wg0 está arriba; el estado de cada máquina se ve con `wg show`
+      test: ["CMD", "wg", "show", "wg0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Router L4 por SNI: no descifra nada, solo reenvía el TLS por el túnel
+  nginx:
+    build:
+      context: ./nginx
+      args:
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.27.4-alpine}
+    container_name: sensorhub_sni_router
+    restart: unless-stopped
+    network_mode: "service:wireguard"
+    depends_on:
+      - wireguard
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./peers.conf:/etc/sensorhub/peers.conf:ro
+      - ./rutas.conf:/etc/sensorhub/rutas.conf:ro

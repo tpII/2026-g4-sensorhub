@@ -1,0 +1,13 @@
+# ==============================================================================
+# SensorHub - Qué máquina atiende cada dominio
+# Copiar a rutas.conf. Una línea por dominio: dominio y nombre de peers.conf.
+# nginx reenvía (sin descifrar) cada conexión al 443 de esa máquina por el
+# túnel; un dominio que no está acá se descarta.
+# Cada dominio necesita su registro A en Cloudflare (nube gris).
+# ==============================================================================
+
+# dominio               máquina
+mcp.ejemplo.com         pc-local
+mqtt.ejemplo.com        pc-local
+mcp2.ejemplo.com        pc-2
+mqtt2.ejemplo.com       pc-2
