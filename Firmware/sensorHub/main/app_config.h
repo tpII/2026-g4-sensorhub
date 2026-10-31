@@ -52,9 +52,10 @@
     #define CONFIG_DEVICE_TYPE          "dht"
 #endif
 
-// Credenciales MQTT (opcionales)
-#define CONFIG_MQTT_USERNAME            ""
-#define CONFIG_MQTT_PASSWORD            ""
+// Credenciales MQTT: el broker rechaza clientes sin usuario. Son las mismas para
+// todos los dispositivos: MQTT_ESP_USERNAME / MQTT_ESP_PASSWORD de Stack/.env
+#define CONFIG_MQTT_USERNAME            "esp"
+#define CONFIG_MQTT_PASSWORD            "<mqtt_esp_password>"
 
 // --- LED de estado (sin WiFi: parpadeo cada 1 s; al conectar: 3 parpadeos; actividad MQTT: destello) ---
 // Pin y nivel activo del LED integrado de cada placa. GPIO_NUM_NC deshabilita el LED de estado.

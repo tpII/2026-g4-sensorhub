@@ -86,7 +86,18 @@ cd Stack
 cp .env.example .env
 ```
 
-Si es necesario, personalizar las credenciales en `.env` (usuario y contraseña de EMQX Dashboard, credenciales y token de InfluxDB).
+Completar en `.env` las contraseñas MQTT (`MQTT_ESP_PASSWORD` y `MQTT_MCP_PASSWORD`): el broker no arranca sin ellas. Por ejemplo, generarlas con `openssl rand -hex 24`. Si es necesario, personalizar también el resto de las credenciales (usuario y contraseña de EMQX Dashboard, credenciales y token de InfluxDB).
+
+#### Credenciales MQTT
+
+EMQX exige usuario y contraseña en todos sus listeners (TCP, TLS y WebSockets); un cliente sin credenciales o con una contraseña incorrecta es rechazado. Hay dos usuarios fijos, definidos en `.env` y cargados en el broker al arrancar ([`broker/docker-entrypoint.sh`](broker/docker-entrypoint.sh)):
+
+| Usuario | Variables en `Stack/.env` | Lo usan | Dónde se configura en el cliente |
+| :--- | :--- | :--- | :--- |
+| `esp` | `MQTT_ESP_USERNAME` / `MQTT_ESP_PASSWORD` | Todos los ESP32 y los simuladores de dispositivos | `CONFIG_MQTT_USERNAME` / `CONFIG_MQTT_PASSWORD` en [`app_config.h`](../Firmware/sensorHub/main/app_config.h); `simuladores-mqtt/.env` |
+| `mcp` | `MQTT_MCP_USERNAME` / `MQTT_MCP_PASSWORD` | El servidor MCP y el simulador que manda comandos | `MQTT_USERNAME` / `MQTT_PASSWORD` en `MCP/.env`; `simuladores-mqtt/.env` |
+
+Para cambiar una contraseña: editarla en `Stack/.env`, recrear el broker (`docker compose up -d`, que lo recrea al cambiar una variable) y actualizarla en los clientes. EMQX no guarda su base de usuarios en un volumen, así que cada recreación vuelve a cargarla desde `.env`.
 
 ### 2. Despliegue del Stack
 
@@ -121,7 +132,7 @@ docker compose ps
 | Servicio | Puerto Host | Protocolo / Propósito | Credenciales por Defecto |
 | :--- | :--- | :--- | :--- |
 | **EMQX Dashboard** | `18083` | HTTP (Consola Web) | `admin` / `admin` |
-| **EMQX MQTT** | `1883` | TCP (Broker MQTT estándar) | Anónimo (Entorno Dev) |
+| **EMQX MQTT** | `1883` | TCP (Broker MQTT estándar) | `esp` / `mcp`, contraseñas en `.env` |
 | **EMQX TLS** | `8883` | TLS (Broker MQTT Seguro) | - |
 | **EMQX WebSockets** | `8083` / `8084` | WS / WSS | - |
 | **InfluxDB Web/API** | `8086` | HTTP (Dashboard y API Flux) | `admin` / `adminpassword123` |

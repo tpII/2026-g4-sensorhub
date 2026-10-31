@@ -12,6 +12,8 @@ services:
     environment:
       - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-sensorhub_emqx}
       - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+      - MQTT_USERNAME=${MQTT_USERNAME:-mcp}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:?Falta MQTT_PASSWORD en .env (MQTT_MCP_PASSWORD de Stack/.env)}
       - INFLUXDB_URL=${INFLUXDB_URL:-http://sensorhub_influxdb:8086}
       - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-sensorhub_admin_secret_token_123}
       - INFLUXDB_ORG=${INFLUXDB_ORG:-sensorhub}

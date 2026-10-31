@@ -80,7 +80,8 @@ Una vez flasheado el dispositivo y conectado al broker:
 
 ```bash
 # Escuchar telemetría en tiempo real de cualquier dispositivo:
-docker run --rm -it eclipse-mosquitto mosquitto_sub -h <host-boker> -t "sensorhub/+/+/telemetry" -v
+# (el broker exige usuario: MQTT_MCP_USERNAME / MQTT_MCP_PASSWORD de Stack/.env)
+docker run --rm -it eclipse-mosquitto mosquitto_sub -h <host-boker> -u mcp -P "<contraseña>" -t "sensorhub/+/+/telemetry" -v
 ```
 
 > Para consultar la especificación canónica completa de payloads y tópicos, consultar [Stack/MQTT.md](../../Stack/MQTT.md).

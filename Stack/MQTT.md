@@ -324,20 +324,20 @@ sensorhub/<device_type>/<device_id>/<canal>
 
 ## 3. Comandos de Prueba con Clientes CLI
 
-Algunos ejemplos para probar la comunicación directamente utilizando el contenedor `eclipse-mosquitto` disponible en Docker o clientes locales:
+Algunos ejemplos para probar la comunicación directamente utilizando el contenedor `eclipse-mosquitto` disponible en Docker o clientes locales. El broker exige usuario y contraseña (ver «Credenciales MQTT» en [README.md](README.md)); los ejemplos usan el usuario del MCP, `mcp`, con su contraseña en `MQTT_MCP_PASSWORD` de `Stack/.env`:
 
 ```bash
 # 1. Monitorear toda la telemetría del sistema en tiempo real:
-docker run --rm -it eclipse-mosquitto mosquitto_sub -h 192.168.0.190 -t "sensorhub/+/+/telemetry" -v
+docker run --rm -it eclipse-mosquitto mosquitto_sub -h 192.168.0.190 -u mcp -P "$MQTT_MCP_PASSWORD" -t "sensorhub/+/+/telemetry" -v
 
 # 2. Monitorear disponibilidad y presencia (LWT) de toda la red:
-docker run --rm -it eclipse-mosquitto mosquitto_sub -h 192.168.0.190 -t "sensorhub/+/+/status" -v
+docker run --rm -it eclipse-mosquitto mosquitto_sub -h 192.168.0.190 -u mcp -P "$MQTT_MCP_PASSWORD" -t "sensorhub/+/+/status" -v
 
 # 3. Enviar comando para ENCENDER el actuador Switch de un nodo específico:
-docker run --rm eclipse-mosquitto mosquitto_pub -h 192.168.0.190 -t "sensorhub/switch/9454c5b096b0/command" -m '{"state":"on"}'
+docker run --rm eclipse-mosquitto mosquitto_pub -h 192.168.0.190 -u mcp -P "$MQTT_MCP_PASSWORD" -t "sensorhub/switch/9454c5b096b0/command" -m '{"state":"on"}'
 
 # 4. Enviar comando para APAGAR el actuador Switch de un nodo específico:
-docker run --rm eclipse-mosquitto mosquitto_pub -h 192.168.0.190 -t "sensorhub/switch/9454c5b096b0/command" -m '{"state":"off"}'
+docker run --rm eclipse-mosquitto mosquitto_pub -h 192.168.0.190 -u mcp -P "$MQTT_MCP_PASSWORD" -t "sensorhub/switch/9454c5b096b0/command" -m '{"state":"off"}'
 ```
 
 ---
