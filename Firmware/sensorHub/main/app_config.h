@@ -100,21 +100,6 @@
     #define CONFIG_STATUS_LED_PIN           GPIO_NUM_NC
     #define CONFIG_STATUS_LED_ACTIVE_LEVEL  1
 #endif
-
-// Tiempos (ms) de cada modo del LED (led_mode_t en led_mgr.h):
-//  INICIANDO:         parpadeo lento continuo (conectando al WiFi, boton de reset presionado)
-//  ESPERANDO_ACCION:  parpadeo rapido continuo (provisioning BLE sin la app conectada)
-//  EXITO:             pulsos muy rapidos y pasa a NORMAL (WiFi conectado, app conectada por BLE, credenciales borradas)
-//  NORMAL:            apagado, con un destello corto por cada mensaje MQTT enviado o recibido
-#define CONFIG_LED_INICIANDO_ON_MS          500
-#define CONFIG_LED_INICIANDO_OFF_MS         500
-#define CONFIG_LED_ESPERANDO_ACCION_ON_MS   250
-#define CONFIG_LED_ESPERANDO_ACCION_OFF_MS  250
-#define CONFIG_LED_EXITO_PULSES             3
-#define CONFIG_LED_EXITO_ON_MS              150
-#define CONFIG_LED_EXITO_OFF_MS             183
-#define CONFIG_LED_NORMAL_ON_MS             50
-// Duracion total del modo EXITO
-#define CONFIG_LED_EXITO_DURATION_MS        (CONFIG_LED_EXITO_PULSES * (CONFIG_LED_EXITO_ON_MS + CONFIG_LED_EXITO_OFF_MS))
+// Los tiempos de cada modo del LED estan en led_mgr.h (CONFIG_LED_*)
 
 #endif // APP_CONFIG_H

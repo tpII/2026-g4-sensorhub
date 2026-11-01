@@ -60,7 +60,6 @@ Si falta, la compilación se detiene con un error que lo indica.
 | **`CONFIG_NTP_SERVER`** | String (default: `"pool.ntp.org"`) | Servidor SNTP para sincronizar la hora del campo `ts`. Si no responde, los payloads se envían sin `ts` hasta sincronizar. |
 | **`CONFIG_STATUS_LED_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | LED de estado, definido por chip:<br>• `GPIO_NUM_8` en ESP32-C3 SuperMini (LED azul integrado).<br>• `GPIO_NUM_2` en ESP32 DevKit (LED azul integrado).<br>• `GPIO_NUM_NC` (deshabilitado) en S2/S3/C6/H2, cuyas placas traen un LED RGB direccionable.<br>Los patrones de cada modo están en la sección 6. En los nodos `switch` se deshabilita si coincide con `CONFIG_SWITCH_PIN`. |
 | **`CONFIG_STATUS_LED_ACTIVE_LEVEL`** | `1` o `0` | Nivel que enciende el LED de estado: `0` en el C3 SuperMini (*active-low*), `1` en el ESP32 DevKit. |
-| **`CONFIG_LED_<MODO>_ON_MS`** / **`_OFF_MS`** | Milisegundos | Tiempo encendido y apagado de cada modo del LED (`INICIANDO`, `ESPERANDO_ACCION`, `EXITO`). `CONFIG_LED_EXITO_PULSES` fija la cantidad de pulsos de `EXITO` y `CONFIG_LED_NORMAL_ON_MS` la duración del destello por mensaje MQTT. |
 | **`CONFIG_PROV_BLE_NAME_PREFIX`** | String (default: `"PROV_"`) | Prefijo del nombre BLE en modo provisioning: `<prefijo><tipo>_<últimos 4 hex de la MAC>` (ej: `PROV_dht_9858`). La app de Espressif por defecto solo lista dispositivos que empiezan con `PROV_`. |
 | **`CONFIG_PROV_POP`** | String (default: `"sensorhub"`) | *Proof of Possession* que pide la app para abrir la sesión cifrada (Security 1). |
 | **`CONFIG_RESET_BUTTON_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | Botón que borra las credenciales WiFi. Es el botón BOOT de cada placa: `GPIO_NUM_9` en C3/C6/H2, `GPIO_NUM_0` en ESP32/S2/S3. |
@@ -225,7 +224,9 @@ Con credenciales guardadas el stack BLE no se inicia y su memoria se libera al a
 
 **Reprovisionar:** mantener presionado el botón BOOT 5 s con el equipo andando. Mientras se mantiene, el LED está en `INICIANDO` (un parpadeo por segundo); al cumplirse el tiempo borra las credenciales, hace `EXITO` y se reinicia en modo provisioning. Soltarlo antes cancela. *No mantenerlo presionado al enchufar o resetear la placa: con BOOT presionado el chip entra en modo de descarga de firmware.*
 
-### Modos del LED (`led_mode_t` en `led_mgr.h`, tiempos en `app_config.h`)
+### Modos del LED (`main/led_mgr.h`)
+
+Los tiempos de cada modo se configuran en `led_mgr.h`: `CONFIG_LED_<MODO>_ON_MS` / `_OFF_MS` para `INICIANDO`, `ESPERANDO_ACCION` y `EXITO`, `CONFIG_LED_EXITO_PULSES` para la cantidad de pulsos de `EXITO` y `CONFIG_LED_NORMAL_ON_MS` para el destello por mensaje MQTT. El pin y el nivel activo siguen en `app_config.h` porque dependen de la placa.
 
 | Modo | Patrón (default) | Cuándo |
 | :--- | :--- | :--- |

@@ -3,7 +3,24 @@
 
 #include "esp_err.h"
 
-// Modos del LED de estado (tiempos en app_config.h, CONFIG_LED_*)
+// --- Tiempos (ms) de cada modo del LED ---
+// El pin y el nivel activo dependen de la placa: estan en app_config.h (CONFIG_STATUS_LED_*).
+//  INICIANDO:         parpadeo lento continuo (conectando al WiFi, boton de reset presionado)
+//  ESPERANDO_ACCION:  parpadeo rapido continuo (provisioning BLE sin la app conectada)
+//  EXITO:             pulsos muy rapidos y pasa a NORMAL (WiFi conectado, app conectada por BLE, credenciales borradas)
+//  NORMAL:            apagado, con un destello corto por cada mensaje MQTT enviado o recibido
+#define CONFIG_LED_INICIANDO_ON_MS          500
+#define CONFIG_LED_INICIANDO_OFF_MS         500
+#define CONFIG_LED_ESPERANDO_ACCION_ON_MS   250
+#define CONFIG_LED_ESPERANDO_ACCION_OFF_MS  250
+#define CONFIG_LED_EXITO_PULSES             3
+#define CONFIG_LED_EXITO_ON_MS              150
+#define CONFIG_LED_EXITO_OFF_MS             183
+#define CONFIG_LED_NORMAL_ON_MS             50
+// Duracion total del modo EXITO
+#define CONFIG_LED_EXITO_DURATION_MS        (CONFIG_LED_EXITO_PULSES * (CONFIG_LED_EXITO_ON_MS + CONFIG_LED_EXITO_OFF_MS))
+
+// Modos del LED de estado
 typedef enum {
     LED_MODE_NORMAL,            // Apagado; destello corto por actividad MQTT
     LED_MODE_INICIANDO,         // Parpadeo lento continuo
