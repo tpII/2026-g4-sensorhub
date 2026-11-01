@@ -16,6 +16,11 @@
 #include <stdio.h>
 #include <string.h>
 
+// sdkconfig.defaults activa NimBLE, pero solo se aplica al generar el sdkconfig: uno viejo no lo tiene
+#if !defined(CONFIG_BT_NIMBLE_ENABLED)
+#error "El provisioning BLE requiere NimBLE: borrar sdkconfig para regenerarlo desde sdkconfig.defaults"
+#endif
+
 static const char *TAG = "PROV_MGR";
 
 static EventGroupHandle_t s_prov_event_group;

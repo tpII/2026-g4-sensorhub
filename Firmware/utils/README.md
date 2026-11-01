@@ -9,7 +9,7 @@ Este entorno permite compilar, flashear y monitorear cualquier modelo de ESP (`e
 1. Desde dentro de la carpeta del repo clonada, moverse a:
 
    ```bash
-   cd Firmwares/utils
+   cd Firmware/utils
    cp .env.example .env # Ajustar los valores deseados
    docker compose run --rm flasher
    docker compose run --rm monitor #opcional
@@ -175,7 +175,7 @@ Get-CimInstance Win32_SerialPort | Select-Object DeviceID, Description
 #### Compilar, flashear y monitorear
 
 ```powershell
-cd Firmwares\sensorHub
+cd Firmware\sensorHub
 
 # TARGET=esp32 y DEVICE_TYPE=dht son los valores del ejemplo, reemplazar COMX por el puerto correspondiente
 idf.py set-target esp32
@@ -214,6 +214,12 @@ idf.py -p COMX flash monitor -b 115200
 
 ---
 
+> 'error: #error "El provisioning BLE requiere NimBLE: borrar sdkconfig para regenerarlo desde sdkconfig.defaults"' **Solucion:**
+
+- El `sdkconfig` se generó antes de que `sdkconfig.defaults` activara Bluetooth, y ESP-IDF solo lo regenera si no existe o si cambia el target (`fullclean` no lo borra). Borrarlo (`rm -f Firmware/sensorHub/sdkconfig`) y volver a compilar.
+
+---
+
 > "A fatal error occurred: Serial data stream stopped: Possible serial noise or corruption." **Solucion:**
 
 - Verificar que no haya quedado otra instancia de ESP-IDF que tenga la consola en uso. En el caso de docker verificar con `docker ps`
@@ -236,5 +242,5 @@ idf.py -p COMX flash monitor -b 115200
   docker ps
   docker stop <container_id>
   # O detener todos los servicios de utils:
-  docker compose -f Firmwares/utils/docker-compose.yml down
+  docker compose -f Firmware/utils/docker-compose.yml down
   ```

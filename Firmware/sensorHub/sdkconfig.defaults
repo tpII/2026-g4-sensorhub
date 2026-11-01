@@ -12,17 +12,25 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
 # TLS para MQTTS quedaba casi llena). Entra en el flash de 2 MB.
 CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 
-# Bluetooth para el provisioning WiFi por BLE (wifi_provisioning). NimBLE ocupa bastante menos
-# flash y RAM que Bluedroid. En el ESP32 clásico el controlador queda solo en modo BLE.
+# Bluetooth para el provisioning WiFi por BLE (wifi_provisioning). Las mismas tres opciones que
+# usa el ejemplo oficial examples/provisioning/wifi_prov_mgr. NimBLE requiere menos heap y flash
+# que Bluedroid (guia "Bluetooth LE Overview"). En el ESP32 clásico el controlador queda solo en
+# modo BLE (en los demás chips la opción no existe y se ignora).
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
-# Recorte de NimBLE a lo que usa el provisioning (~115 KB menos en el C3): solo rol periférico,
-# 1 conexión y advertising legacy. El pairing BLE (Security Manager) no hace falta: la sesión
-# la cifra la capa de provisioning (Security 1 con PoP).
+
+# Recorte de NimBLE recomendado por la guia "Minimizing Binary Size" (seccion Bluetooth NimBLE)
+# para lo que usa el provisioning: una sola conexión (en el ESP32 también en el controlador),
+# sin los roles central y observer (el ESP solo anuncia y la app se conecta) y menos logs.
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+CONFIG_BTDM_CTRL_BLE_MAX_CONN=1
 CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
 CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
+CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
+
+# Recorte propio (no lo sugiere la guia): sin Security Manager, porque el pairing BLE no hace falta
+# (la sesión la cifra la capa de provisioning con Security 1 y la PoP, y protocomm solo lo usaría
+# con CONFIG_WIFI_PROV_BLE_FORCE_ENCRYPTION), y sin las funciones de BLE 5, que el provisioning no usa.
 CONFIG_BT_NIMBLE_SECURITY_ENABLE=n
 CONFIG_BT_NIMBLE_50_FEATURE_SUPPORT=n
-CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
-CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y

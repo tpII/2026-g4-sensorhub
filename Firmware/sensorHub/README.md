@@ -11,9 +11,9 @@ Firmware modular desarrollado en **ESP-IDF v5.x** y **FreeRTOS** para la platafo
 El código está estructurado siguiendo el principio de responsabilidad única (SRP), manteniendo el punto de entrada (`main.c`) agnóstico de los sensores y actuadores físicos:
 
 ```text
-Firmwares/sensorHub/
+Firmware/sensorHub/
 ├── CMakeLists.txt                 # Definición del proyecto CMake
-├── sdkconfig.defaults             # Opciones de Kconfig fijadas por el proyecto (el sdkconfig se genera en el build)
+├── sdkconfig.defaults             # Opciones de Kconfig fijadas por el proyecto: particiones, CAs y Bluetooth (el sdkconfig se genera en el build)
 └── main/
     ├── idf_component.yml          # Dependencias oficiales (esp-idf-lib/dht)
     ├── CMakeLists.txt             # Registro de fuentes y carpetas de include
@@ -49,13 +49,13 @@ La contraseña MQTT (`CONFIG_MQTT_PASSWORD`) no va en `app_config.h` sino en `ma
 cp main/secrets.h.example main/secrets.h   # y completar la contraseña MQTT
 ```
 
-Las credenciales WiFi no se compilan: se cargan en cada equipo por BLE con el provisioning (ver sección 6).
-
 Si falta, la compilación se detiene con un error que lo indica.
+
+Las credenciales WiFi no se compilan: se cargan en cada equipo por BLE con el provisioning (ver sección 6).
 
 | Parámetro | Valores Posibles | Descripción |
 | :--- | :--- | :--- |
-| **`CONFIG_WIFI_MAX_TX_POWER`** | `0` o `8`–`84` (unidades de 0,25 dBm) | Límite de potencia de transmisión WiFi. `0` = sin límite (default). En placas ESP32-C3 SuperMini clon que no logran conectar (log `Desconectado (reason=2)`, *AUTH_EXPIRE*), bajarla a `44` (11 dBm) o `34` (8,5 dBm) suele resolverlo, a costa de algo de alcance. |
+| **`CONFIG_WIFI_MAX_TX_POWER`** | `0` o `8`–`84` (unidades de 0,25 dBm) | Límite de potencia de transmisión WiFi. `0` = sin límite. El proyecto usa `60` (15 dBm). En placas ESP32-C3 SuperMini clon que no logran conectar (log `Desconectado (reason=2)`, *AUTH_EXPIRE*), bajarla a `44` (11 dBm) o `34` (8,5 dBm) suele resolverlo, a costa de algo de alcance. |
 | **`CONFIG_SELECTED_PROTOCOL`** | `PROTOCOL_MQTT`<br>`PROTOCOL_MQTTS`<br>`PROTOCOL_WS`<br>`PROTOCOL_WSS` | Protocolo de transporte MQTT:<br>• `PROTOCOL_MQTT`: TCP plano (puerto 1883)<br>• `PROTOCOL_MQTTS`: TLS / SSL (puerto 443, acceso público por el dominio; ver [Stack/tunel-local](../../Stack/tunel-local/README.md))<br>• `PROTOCOL_WS`: WebSockets (puerto 8083)<br>• `PROTOCOL_WSS`: WebSockets Seguro (puerto 8084) |
 | **`CONFIG_NTP_SERVER`** | String (default: `"pool.ntp.org"`) | Servidor SNTP para sincronizar la hora del campo `ts`. Si no responde, los payloads se envían sin `ts` hasta sincronizar. |
 | **`CONFIG_STATUS_LED_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | LED de estado, definido por chip:<br>• `GPIO_NUM_8` en ESP32-C3 SuperMini (LED azul integrado).<br>• `GPIO_NUM_2` en ESP32 DevKit (LED azul integrado).<br>• `GPIO_NUM_NC` (deshabilitado) en S2/S3/C6/H2, cuyas placas traen un LED RGB direccionable.<br>Los patrones de cada modo están en la sección 6. En los nodos `switch` se deshabilita si coincide con `CONFIG_SWITCH_PIN`. |
@@ -72,7 +72,7 @@ Si falta, la compilación se detiene con un error que lo indica.
 | **`CONFIG_MQTT_USERNAME`** | String (default: `"esp"`) | Usuario del broker MQTT, compartido por todos los dispositivos (`MQTT_ESP_USERNAME` de `Stack/.env`). |
 | **`CONFIG_MQTT_PASSWORD`** | String | Contraseña del usuario anterior (`MQTT_ESP_PASSWORD` de `Stack/.env`). Va en `secrets.h`. |
 
-NOTA sobre WS: El proyecto utiliza MQTT sobre TCP. El cliente esp-mqtt también soporta MQTT sobre WebSocket, por lo que se dejó la opción seleccionable aquí y el broker tiene habilitado el listener correspondiente. WS debería funcionar sin cambios adicionales, aunque no fue probado. WSS (al igual que MQTTS) requiere configurar en el firmware la CA del broker, ya que actualmente se valida contra el bundle de CAs públicas.
+NOTA sobre WS: El proyecto utiliza MQTT sobre TCP. El cliente esp-mqtt también soporta MQTT sobre WebSocket, por lo que se dejó la opción seleccionable aquí y el broker tiene habilitado el listener correspondiente. WS debería funcionar sin cambios adicionales, aunque no fue probado. Con MQTTS y WSS el certificado del broker se valida contra el bundle reducido de CAs públicas de ESP-IDF (`sdkconfig.defaults`), que incluye la raíz de Let's Encrypt.
 
 ---
 
@@ -109,8 +109,8 @@ Encapsula los parámetros del dispositivo de salida / conmutación.
 
 | Parámetro | Valores Posibles | Descripción |
 | :--- | :--- | :--- |
-| **`CONFIG_SWITCH_PIN`** | `GPIO_NUM_X` | Pin de salida conectado al switch o bobina del relé.<br>• `GPIO_NUM_8` para el LED integrado en el ESP32-C3 SuperMini.<br>• `GPIO_NUM_2` para el LED integrado en placas ESP32 DevKit. |
-| **`CONFIG_SWITCH_ACTIVE_LEVEL`** | `1` o `0` | Nivel lógico de encendido:<br>• `0` (Active-Low): Nivel 0V enciende el actuador (común en ESP32-C3 SuperMini GPIO 8 y módulos de relé optoacoplados).<br>• `1` (Active-High): Nivel 3.3V enciende el actuador (común en ESP32 DevKit GPIO 2). |
+| **`CONFIG_SWITCH_PIN`** | `GPIO_NUM_X` | Pin de salida conectado al switch o bobina del relé.<br>• `GPIO_NUM_13` en ESP32.<br>• `GPIO_NUM_8` en ESP32-C3 (LED integrado del SuperMini).<br>• `GPIO_NUM_2` en los demás chips. |
+| **`CONFIG_SWITCH_ACTIVE_LEVEL`** | `1` o `0` | Nivel lógico de encendido (default: `0` en todos los chips):<br>• `0` (Active-Low): Nivel 0V enciende el actuador (común en ESP32-C3 SuperMini GPIO 8 y módulos de relé optoacoplados).<br>• `1` (Active-High): Nivel 3.3V enciende el actuador (común en ESP32 DevKit GPIO 2). |
 | **`CONFIG_SWITCH_TELEMETRY_QOS`** | `0`, `1` o `2` (default: `1`) | QoS del feedback de estado en `telemetry`. |
 | **`CONFIG_SWITCH_TELEMETRY_RETAIN`** | `1` o `0` (default: `1`) | Retain del feedback: el último estado confirmado queda disponible para cualquier suscriptor. |
 | **`CONFIG_SWITCH_COMMAND_QOS`** | `0`, `1` o `2` (default: `1`) | QoS de la suscripción a `command`. Los comandos `on`/`off` son idempotentes, así que QoS 1 alcanza. |
@@ -150,9 +150,9 @@ Los tópicos se construyen automáticamente en tiempo de ejecución con la fórm
 
 ## 4. Compilación, Flasheo y Monitoreo (Docker Compose)
 
-Todas las herramientas de compilación y flasheo están contenidas en Docker mediante ESP-IDF oficial v5.5.6 en `Firmwares/utils/`.
+Todas las herramientas de compilación y flasheo están contenidas en Docker mediante ESP-IDF oficial v5.5.6 en `Firmware/utils/`.
 
-### Variables de entorno (`Firmwares/utils/.env`)
+### Variables de entorno (`Firmware/utils/.env`)
 
 ```ini
 TARGET=esp32c3          # esp32, esp32c3, esp32s3, etc.
@@ -176,6 +176,7 @@ DEVICE_TYPE=pir idf.py clean build
 `sdkconfig` y `dependencies.lock` se generan en cada build y están en `.gitignore`. Su formato depende de la versión de ESP-IDF, por lo que versionarlos rompe el build cuando alguien compila con otra versión (por ejemplo, un lock generado con ESP-IDF 5.3 no lo puede leer el 5.2.2 que se usaba antes en Docker).
 
 - **Configuración de Kconfig:** cualquier opción que el proyecto necesite distinta del default va en `sdkconfig.defaults`; `idf.py menuconfig` solo cambia el `sdkconfig` local y se pierde en el próximo build limpio. El target no va ahí: lo define `TARGET` (`idf.py set-target`).
+- **`sdkconfig.defaults` se aplica solo al generar el `sdkconfig`** (cuando no existe o al cambiar el target); `fullclean` no lo borra. Después de modificar `sdkconfig.defaults` hay que borrar `sdkconfig`. Por ejemplo, un `sdkconfig` anterior al provisioning BLE no tiene Bluetooth y el build se corta con `#error "El provisioning BLE requiere NimBLE..."`.
 - **Versiones de componentes:** se fijan con versión exacta en `main/idf_component.yml` (ej. `esp-idf-lib/dht: "1.2.0"`), para que el build sea reproducible sin lock.
 
 ---
@@ -221,6 +222,8 @@ Las credenciales WiFi se cargan por Bluetooth LE con la app **"ESP BLE Provision
 4. Arranca conectándose con las credenciales guardadas (`INICIANDO`) y al obtener IP hace `EXITO` y pasa a `NORMAL`.
 
 Con credenciales guardadas el stack BLE no se inicia y su memoria se libera al arrancar.
+
+**Bluetooth en `sdkconfig.defaults`:** se activa NimBLE (más liviano que Bluedroid), como en el ejemplo oficial `wifi_prov_mgr` de ESP-IDF, y se recorta a lo que usa el provisioning siguiendo la guía *Minimizing Binary Size* de ESP-IDF: una conexión, sin los roles central y observer y con menos logs. Además, por decisión propia, se quitan el Security Manager (la sesión la cifra la capa de provisioning con Security 1 y la PoP) y las funciones de BLE 5. Si la app no lograra conectarse, lo primero a revertir es `CONFIG_BT_NIMBLE_SECURITY_ENABLE=n`. Qué hace cada opción y su referencia en la documentación: wiki, página 07, sección 4.3.
 
 **Reprovisionar:** mantener presionado el botón BOOT 5 s con el equipo andando. Mientras se mantiene, el LED está en `INICIANDO` (un parpadeo por segundo); al cumplirse el tiempo borra las credenciales, hace `EXITO` y se reinicia en modo provisioning. Soltarlo antes cancela. El botón funciona por interrupción, y mientras se mantiene presionado los reinicios por timeout del arranque (WiFi a 1 min, MQTT a 10 s) esperan: así no pisan el borrado. *No mantenerlo presionado al enchufar o resetear la placa: con BOOT presionado el chip entra en modo de descarga de firmware.*
 
