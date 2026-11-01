@@ -17,14 +17,16 @@ Firmwares/sensorHub/
 └── main/
     ├── idf_component.yml          # Dependencias oficiales (esp-idf-lib/dht)
     ├── CMakeLists.txt             # Registro de fuentes y carpetas de include
-    ├── app_config.h               # Configuración transversal del sistema (WiFi, MQTT, Dominios)
-    ├── secrets.h.example          # Plantilla de credenciales (WiFi y contraseña MQTT)
+    ├── app_config.h               # Configuración transversal del sistema (WiFi, MQTT, Dominios, LED, botón)
+    ├── secrets.h.example          # Plantilla de credenciales (contraseña MQTT)
     ├── secrets.h                  # Credenciales reales (ignorado por Git, se crea desde el .example)
     ├── main.c                     # Orquestador del sistema
     ├── system_mgr.h / .c          # NVS, identidad de hardware (MAC) y generador de tópicos
     ├── wifi_mgr.h / .c            # Manejador de WiFi STA con auto-reconexión y eventos
+    ├── prov_mgr.h / .c            # Provisioning WiFi por BLE (wifi_provisioning + app de Espressif)
+    ├── button_mgr.h / .c          # Botón BOOT: mantener 5 s borra las credenciales WiFi
     ├── time_mgr.h / .c            # Sincronización horaria SNTP para el campo "ts" de los payloads
-    ├── led_mgr.h / .c             # LED de estado: parpadeo sin WiFi, 3 parpadeos al conectar, destello por mensaje MQTT
+    ├── led_mgr.h / .c             # LED de estado: modos INICIANDO, ESPERANDO_ACCION, EXITO y NORMAL
     ├── mqtt_mgr.h / .c            # Cliente MQTT universal (MQTT, MQTTS, WS, WSS, Pub/Sub)
     ├── sensor_service.h / .c      # Despachador que arranca la tarea según CONFIG_DEVICE_TYPE
     └── devices/                   # Módulos encapsulados por tipo de dispositivo
@@ -41,23 +43,29 @@ Firmwares/sensorHub/
 
 Este archivo contiene exclusivamente parámetros globales y de red, independientes del sensor o actuador utilizado.
 
-Las credenciales (`CONFIG_WIFI_SSID`, `CONFIG_WIFI_PASS` y `CONFIG_MQTT_PASSWORD`) no van en `app_config.h` sino en `main/secrets.h`, que Git ignora y que `app_config.h` incluye. Antes de compilar por primera vez:
+La contraseña MQTT (`CONFIG_MQTT_PASSWORD`) no va en `app_config.h` sino en `main/secrets.h`, que Git ignora y que `app_config.h` incluye. Antes de compilar por primera vez:
 
 ```bash
-cp main/secrets.h.example main/secrets.h   # y completar las tres credenciales
+cp main/secrets.h.example main/secrets.h   # y completar la contraseña MQTT
 ```
+
+Las credenciales WiFi no se compilan: se cargan en cada equipo por BLE con el provisioning (ver sección 6).
 
 Si falta, la compilación se detiene con un error que lo indica.
 
 | Parámetro | Valores Posibles | Descripción |
 | :--- | :--- | :--- |
-| **`CONFIG_WIFI_SSID`** | String (ej: `"MiWiFi"`) | Nombre de la red WiFi 2.4 GHz. Va en `secrets.h`. |
-| **`CONFIG_WIFI_PASS`** | String | Contraseña de la red WiFi. Va en `secrets.h`. |
 | **`CONFIG_WIFI_MAX_TX_POWER`** | `0` o `8`–`84` (unidades de 0,25 dBm) | Límite de potencia de transmisión WiFi. `0` = sin límite (default). En placas ESP32-C3 SuperMini clon que no logran conectar (log `Desconectado (reason=2)`, *AUTH_EXPIRE*), bajarla a `44` (11 dBm) o `34` (8,5 dBm) suele resolverlo, a costa de algo de alcance. |
 | **`CONFIG_SELECTED_PROTOCOL`** | `PROTOCOL_MQTT`<br>`PROTOCOL_MQTTS`<br>`PROTOCOL_WS`<br>`PROTOCOL_WSS` | Protocolo de transporte MQTT:<br>• `PROTOCOL_MQTT`: TCP plano (puerto 1883)<br>• `PROTOCOL_MQTTS`: TLS / SSL (puerto 443, acceso público por el dominio; ver [Stack/tunel-local](../../Stack/tunel-local/README.md))<br>• `PROTOCOL_WS`: WebSockets (puerto 8083)<br>• `PROTOCOL_WSS`: WebSockets Seguro (puerto 8084) |
 | **`CONFIG_NTP_SERVER`** | String (default: `"pool.ntp.org"`) | Servidor SNTP para sincronizar la hora del campo `ts`. Si no responde, los payloads se envían sin `ts` hasta sincronizar. |
-| **`CONFIG_STATUS_LED_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | LED de estado, definido por chip:<br>• `GPIO_NUM_8` en ESP32-C3 SuperMini (LED azul integrado).<br>• `GPIO_NUM_2` en ESP32 DevKit (LED azul integrado).<br>• `GPIO_NUM_NC` (deshabilitado) en S2/S3/C6/H2, cuyas placas traen un LED RGB direccionable.<br>Sin WiFi parpadea 1 vez por segundo; al conectar hace 3 parpadeos en ~1 s; cada mensaje MQTT enviado o recibido produce un destello corto. En los nodos `switch` se deshabilita si coincide con `CONFIG_SWITCH_PIN`. |
+| **`CONFIG_STATUS_LED_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | LED de estado, definido por chip:<br>• `GPIO_NUM_8` en ESP32-C3 SuperMini (LED azul integrado).<br>• `GPIO_NUM_2` en ESP32 DevKit (LED azul integrado).<br>• `GPIO_NUM_NC` (deshabilitado) en S2/S3/C6/H2, cuyas placas traen un LED RGB direccionable.<br>Los patrones de cada modo están en la sección 6. En los nodos `switch` se deshabilita si coincide con `CONFIG_SWITCH_PIN`. |
 | **`CONFIG_STATUS_LED_ACTIVE_LEVEL`** | `1` o `0` | Nivel que enciende el LED de estado: `0` en el C3 SuperMini (*active-low*), `1` en el ESP32 DevKit. |
+| **`CONFIG_LED_<MODO>_ON_MS`** / **`_OFF_MS`** | Milisegundos | Tiempo encendido y apagado de cada modo del LED (`INICIANDO`, `ESPERANDO_ACCION`, `EXITO`). `CONFIG_LED_EXITO_PULSES` fija la cantidad de pulsos de `EXITO` y `CONFIG_LED_NORMAL_ON_MS` la duración del destello por mensaje MQTT. |
+| **`CONFIG_PROV_BLE_NAME_PREFIX`** | String (default: `"PROV_"`) | Prefijo del nombre BLE en modo provisioning: `<prefijo><tipo>_<últimos 4 hex de la MAC>` (ej: `PROV_dht_9858`). La app de Espressif por defecto solo lista dispositivos que empiezan con `PROV_`. |
+| **`CONFIG_PROV_POP`** | String (default: `"sensorhub"`) | *Proof of Possession* que pide la app para abrir la sesión cifrada (Security 1). |
+| **`CONFIG_RESET_BUTTON_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | Botón que borra las credenciales WiFi. Es el botón BOOT de cada placa: `GPIO_NUM_9` en C3/C6/H2, `GPIO_NUM_0` en ESP32/S2/S3. |
+| **`CONFIG_RESET_BUTTON_ACTIVE_LEVEL`** | `0` o `1` | Nivel al presionar (`0`: BOOT conecta a GND). |
+| **`CONFIG_RESET_BUTTON_HOLD_MS`** | Milisegundos (default: `5000`) | Tiempo que hay que mantenerlo presionado. |
 | **`CONFIG_BROKER_HOST`** | String (ej: `"mqtt.sensorhub.wgr.com.ar"`) | Host del broker MQTT. Con MQTTS tiene que ser el dominio (no una IP), porque el certificado y el ruteo por SNI dependen del nombre. |
 | **`CONFIG_WS_PATH`** | String (ej: `"/mqtt"`) | Path para conexiones WebSockets. |
 | **`CONFIG_MQTT_TOPIC_PREFIX`** | String (default: `"sensorhub"`) | Espacio de nombres raíz para todos los tópicos. |
@@ -199,3 +207,31 @@ Para añadir un nuevo sensor o actuador (por ejemplo, un sensor ultrasónico `"s
    ```bash
    idf.py -DDEVICE_TYPE=sonar build
    ```
+
+---
+
+## 6. Provisioning WiFi y LED de Estado
+
+Las credenciales WiFi se cargan por Bluetooth LE con la app **"ESP BLE Provisioning"** de Espressif (Play Store / App Store), usando el componente `wifi_provisioning` de ESP-IDF. Las guarda el driver WiFi en NVS.
+
+1. Si el equipo arranca **sin credenciales**, se anuncia por BLE como `PROV_<tipo>_<xxxx>` (LED en `ESPERANDO_ACCION`). El log serie muestra el nombre, la PoP y el payload para armar un QR.
+2. En la app: *Provision New Device* → *I don't have a QR code* (o escanear el QR), elegir el dispositivo e ingresar la PoP (`CONFIG_PROV_POP`). La app necesita Bluetooth y, en muchos Android, la ubicación activada. Al conectarse la app, el LED hace `EXITO` y queda apagado.
+3. La app lista las redes que escaneó el equipo; se elige una y se ingresa la contraseña. El equipo prueba la conexión (`INICIANDO`):
+   - Si falla, la app muestra el motivo (contraseña incorrecta o red no encontrada), el LED vuelve a `ESPERANDO_ACCION` y se puede reintentar sin reiniciar.
+   - Si conecta, el LED hace `EXITO` y el equipo se reinicia.
+4. Arranca conectándose con las credenciales guardadas (`INICIANDO`) y al obtener IP hace `EXITO` y pasa a `NORMAL`.
+
+Con credenciales guardadas el stack BLE no se inicia y su memoria se libera al arrancar.
+
+**Reprovisionar:** mantener presionado el botón BOOT 5 s con el equipo andando. Mientras se mantiene, el LED está en `INICIANDO` (un parpadeo por segundo); al cumplirse el tiempo borra las credenciales, hace `EXITO` y se reinicia en modo provisioning. Soltarlo antes cancela. *No mantenerlo presionado al enchufar o resetear la placa: con BOOT presionado el chip entra en modo de descarga de firmware.*
+
+### Modos del LED (`led_mode_t` en `led_mgr.h`, tiempos en `app_config.h`)
+
+| Modo | Patrón (default) | Cuándo |
+| :--- | :--- | :--- |
+| `INICIANDO` | 500 ms encendido / 500 ms apagado | Conectando al WiFi; botón de reset presionado |
+| `ESPERANDO_ACCION` | 250 ms / 250 ms | Provisioning BLE sin la app conectada; credenciales rechazadas |
+| `EXITO` | 3 pulsos de 150 ms / 183 ms (~1 s), después `NORMAL` | WiFi conectado; la app se conectó por BLE; credenciales borradas |
+| `NORMAL` | Apagado, destello de 50 ms por mensaje MQTT | Funcionamiento normal |
+
+Cualquier módulo cambia el modo con `led_mgr_set_mode()`. El botón usa `led_mgr_set_override()` para forzar su patrón sin perder el modo de fondo, que vuelve al soltarlo.

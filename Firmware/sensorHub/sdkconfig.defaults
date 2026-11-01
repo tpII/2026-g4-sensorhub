@@ -11,3 +11,18 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
 # Tabla de particiones con una sola app de 1,5 MB (la default es de 1 MB y con
 # TLS para MQTTS quedaba casi llena). Entra en el flash de 2 MB.
 CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# Bluetooth para el provisioning WiFi por BLE (wifi_provisioning). NimBLE ocupa bastante menos
+# flash y RAM que Bluedroid. En el ESP32 clásico el controlador queda solo en modo BLE.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
+# Recorte de NimBLE a lo que usa el provisioning (~115 KB menos en el C3): solo rol periférico,
+# 1 conexión y advertising legacy. El pairing BLE (Security Manager) no hace falta: la sesión
+# la cifra la capa de provisioning (Security 1 con PoP).
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
+CONFIG_BT_NIMBLE_SECURITY_ENABLE=n
+CONFIG_BT_NIMBLE_50_FEATURE_SUPPORT=n
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y

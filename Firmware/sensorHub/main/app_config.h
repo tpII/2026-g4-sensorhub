@@ -8,8 +8,9 @@
 // Configuración General de la Aplicación y Conectividad (Agnóstica del Hardware)
 // =============================================================================
 
-// --- Credenciales (WiFi y contraseña MQTT) ---
-// Viven en secrets.h, ignorado por Git: copiar secrets.h.example y completarlo.
+// --- Credenciales ---
+// La contraseña MQTT vive en secrets.h, ignorado por Git: copiar secrets.h.example y completarlo.
+// Las credenciales WiFi no se compilan: se cargan por BLE con el provisioning (ver prov_mgr.h).
 #if __has_include("secrets.h")
     #include "secrets.h"
 #else
@@ -20,6 +21,26 @@
 // 0 = sin limite (maximo del chip, ~20 dBm). Algunas placas ESP32-C3 SuperMini clon no logran
 // autenticar con la potencia maxima (log "reason=2", AUTH_EXPIRE): bajarla suele resolverlo.
 #define CONFIG_WIFI_MAX_TX_POWER        60
+
+// --- Provisioning WiFi por BLE (app "ESP BLE Provisioning" de Espressif) ---
+// Sin credenciales guardadas, el equipo se anuncia por BLE como "<prefijo><tipo>_<ultimos 4 hex de la MAC>"
+// (ej: "PROV_dht_9858"). La app por defecto solo lista dispositivos que empiezan con "PROV_".
+#define CONFIG_PROV_BLE_NAME_PREFIX     "PROV_"
+// Proof of Possession: la app la pide para establecer la sesion cifrada (Security 1)
+#define CONFIG_PROV_POP                 "sensorhub"
+
+// --- Boton de reset de WiFi ---
+// Mantenerlo presionado CONFIG_RESET_BUTTON_HOLD_MS borra las credenciales WiFi y reinicia en
+// modo provisioning. Es el boton BOOT integrado de cada placa. GPIO_NUM_NC lo deshabilita.
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32H2)
+    #define CONFIG_RESET_BUTTON_PIN     GPIO_NUM_9    // BOOT en ESP32-C3 SuperMini / DevKits C6 y H2
+#elif defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)
+    #define CONFIG_RESET_BUTTON_PIN     GPIO_NUM_0    // BOOT en ESP32 DevKit / S2 / S3
+#else
+    #define CONFIG_RESET_BUTTON_PIN     GPIO_NUM_NC
+#endif
+#define CONFIG_RESET_BUTTON_ACTIVE_LEVEL 0            // BOOT conecta a GND al presionar
+#define CONFIG_RESET_BUTTON_HOLD_MS     5000
 
 // --- Selección de Protocolo MQTT ---
 #define PROTOCOL_MQTT                   0   // TCP: mqtt://host:1883
@@ -64,7 +85,7 @@
 // los dispositivos: MQTT_ESP_USERNAME de Stack/.env (la contraseña está en secrets.h)
 #define CONFIG_MQTT_USERNAME            "esp"
 
-// --- LED de estado (sin WiFi: parpadeo cada 1 s; al conectar: 3 parpadeos; actividad MQTT: destello) ---
+// --- LED de estado ---
 // Pin y nivel activo del LED integrado de cada placa. GPIO_NUM_NC deshabilita el LED de estado.
 // Las placas de S2, S3, C6 y H2 traen un LED RGB direccionable (WS2812), que no se maneja con un GPIO
 // simple: ahi queda deshabilitado; para usarlo, conectar un LED comun y poner su pin aca.
@@ -79,5 +100,21 @@
     #define CONFIG_STATUS_LED_PIN           GPIO_NUM_NC
     #define CONFIG_STATUS_LED_ACTIVE_LEVEL  1
 #endif
+
+// Tiempos (ms) de cada modo del LED (led_mode_t en led_mgr.h):
+//  INICIANDO:         parpadeo lento continuo (conectando al WiFi, boton de reset presionado)
+//  ESPERANDO_ACCION:  parpadeo rapido continuo (provisioning BLE sin la app conectada)
+//  EXITO:             pulsos muy rapidos y pasa a NORMAL (WiFi conectado, app conectada por BLE, credenciales borradas)
+//  NORMAL:            apagado, con un destello corto por cada mensaje MQTT enviado o recibido
+#define CONFIG_LED_INICIANDO_ON_MS          500
+#define CONFIG_LED_INICIANDO_OFF_MS         500
+#define CONFIG_LED_ESPERANDO_ACCION_ON_MS   250
+#define CONFIG_LED_ESPERANDO_ACCION_OFF_MS  250
+#define CONFIG_LED_EXITO_PULSES             3
+#define CONFIG_LED_EXITO_ON_MS              150
+#define CONFIG_LED_EXITO_OFF_MS             183
+#define CONFIG_LED_NORMAL_ON_MS             50
+// Duracion total del modo EXITO
+#define CONFIG_LED_EXITO_DURATION_MS        (CONFIG_LED_EXITO_PULSES * (CONFIG_LED_EXITO_ON_MS + CONFIG_LED_EXITO_OFF_MS))
 
 #endif // APP_CONFIG_H

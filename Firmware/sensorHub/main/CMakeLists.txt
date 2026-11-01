@@ -6,15 +6,17 @@ idf_component_register(
     SRCS "main.c"
          "system_mgr.c"
          "wifi_mgr.c"
+         "prov_mgr.c"
          "mqtt_mgr.c"
          "time_mgr.c"
          "led_mgr.c"
+         "button_mgr.c"
          "sensor_service.c"
          "devices/dht_device.c"
          "devices/pir_device.c"
          "devices/switch_device.c"
     INCLUDE_DIRS "." "devices"
-    REQUIRES esp_wifi esp_event nvs_flash mqtt esp_timer json driver mbedtls
+    REQUIRES esp_wifi esp_event esp_netif wifi_provisioning nvs_flash mqtt esp_timer json driver mbedtls
 )
 
 # Permite definir el tipo de dispositivo desde el build (-DDEVICE_TYPE=... o variable de entorno DEVICE_TYPE)
