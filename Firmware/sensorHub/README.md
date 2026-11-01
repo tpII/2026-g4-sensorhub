@@ -222,7 +222,7 @@ Las credenciales WiFi se cargan por Bluetooth LE con la app **"ESP BLE Provision
 
 Con credenciales guardadas el stack BLE no se inicia y su memoria se libera al arrancar.
 
-**Reprovisionar:** mantener presionado el botón BOOT 5 s con el equipo andando. Mientras se mantiene, el LED está en `INICIANDO` (un parpadeo por segundo); al cumplirse el tiempo borra las credenciales, hace `EXITO` y se reinicia en modo provisioning. Soltarlo antes cancela. *No mantenerlo presionado al enchufar o resetear la placa: con BOOT presionado el chip entra en modo de descarga de firmware.*
+**Reprovisionar:** mantener presionado el botón BOOT 5 s con el equipo andando. Mientras se mantiene, el LED está en `INICIANDO` (un parpadeo por segundo); al cumplirse el tiempo borra las credenciales, hace `EXITO` y se reinicia en modo provisioning. Soltarlo antes cancela. El botón funciona por interrupción, y mientras se mantiene presionado los reinicios por timeout del arranque (WiFi a 1 min, MQTT a 10 s) esperan: así no pisan el borrado. *No mantenerlo presionado al enchufar o resetear la placa: con BOOT presionado el chip entra en modo de descarga de firmware.*
 
 ### Modos del LED (`main/led_mgr.h`)
 

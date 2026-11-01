@@ -9,44 +9,45 @@
 #include "freertos/task.h"
 #include <string.h>
 
+// =============================================================================
+// Funcionamiento
+//
+// Una unica tarea (led_task) maneja el GPIO; el resto del firmware solo cambia el modo
+// y le avisa con una notificacion. El modo visible sale de dos capas:
+//  - Modo del sistema: lo fijan WiFi, provisioning, etc. con led_mgr_set_mode().
+//  - Override: lo impone el boton de reset mientras esta presionado. Al quitarlo vuelve
+//    a verse el modo del sistema (aunque haya cambiado mientras tanto).
+//
+// Cada modo tiene un comportamiento:
+//  - INICIANDO / ESPERANDO_ACCION: parpadeo continuo hasta que cambie el modo.
+//  - EXITO: pulsos sin interrupcion y despues vuelve solo a NORMAL.
+//  - NORMAL: apagado; un destello corto por cada aviso de actividad MQTT.
+// =============================================================================
+
 static const char *TAG = "LED_MGR";
 
-// Patron de cada modo. pulses = 0: se repite mientras dure el modo.
+// Un parpadeo: tiempo encendido y apagado (tiempos en led_mgr.h)
 typedef struct {
     uint32_t on_ms;
     uint32_t off_ms;
-    uint32_t pulses;
-} led_pattern_t;
+} led_blink_t;
 
-static const led_pattern_t s_patterns[] = {
-    [LED_MODE_NORMAL]           = { CONFIG_LED_NORMAL_ON_MS, 0, 1 },
-    [LED_MODE_INICIANDO]        = { CONFIG_LED_INICIANDO_ON_MS, CONFIG_LED_INICIANDO_OFF_MS, 0 },
-    [LED_MODE_ESPERANDO_ACCION] = { CONFIG_LED_ESPERANDO_ACCION_ON_MS, CONFIG_LED_ESPERANDO_ACCION_OFF_MS, 0 },
-    [LED_MODE_EXITO]            = { CONFIG_LED_EXITO_ON_MS, CONFIG_LED_EXITO_OFF_MS, CONFIG_LED_EXITO_PULSES },
-};
+static const led_blink_t BLINK_INICIANDO        = { CONFIG_LED_INICIANDO_ON_MS, CONFIG_LED_INICIANDO_OFF_MS };
+static const led_blink_t BLINK_ESPERANDO_ACCION = { CONFIG_LED_ESPERANDO_ACCION_ON_MS, CONFIG_LED_ESPERANDO_ACCION_OFF_MS };
+static const led_blink_t BLINK_EXITO            = { CONFIG_LED_EXITO_ON_MS, CONFIG_LED_EXITO_OFF_MS };
+static const led_blink_t BLINK_ACTIVIDAD        = { CONFIG_LED_NORMAL_ON_MS, 0 };
 
-// Bits de notificacion de la tarea
-#define LED_EVT_MODE_CHANGED            (1 << 0)
-#define LED_EVT_ACTIVITY                (1 << 1)
+// Avisos que recibe la tarea (bits de notificacion)
+#define AVISO_CAMBIO_DE_MODO    (1 << 0)
+#define AVISO_ACTIVIDAD_MQTT    (1 << 1)
 
 static TaskHandle_t s_led_task = NULL;
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
-static led_mode_t s_mode = LED_MODE_INICIANDO;
-static led_mode_t s_override_mode = LED_MODE_NORMAL;
+static led_mode_t s_mode = LED_MODE_INICIANDO;          // Modo del sistema
+static led_mode_t s_override_mode = LED_MODE_NORMAL;    // Modo impuesto por el boton
 static bool s_override = false;
 
-static void led_set(bool on) {
-    gpio_set_level(CONFIG_STATUS_LED_PIN, on ? CONFIG_STATUS_LED_ACTIVE_LEVEL : !CONFIG_STATUS_LED_ACTIVE_LEVEL);
-}
-
-static void led_blink(uint32_t times, uint32_t on_ms, uint32_t off_ms) {
-    for (uint32_t i = 0; i < times; i++) {
-        led_set(true);
-        vTaskDelay(pdMS_TO_TICKS(on_ms));
-        led_set(false);
-        vTaskDelay(pdMS_TO_TICKS(off_ms));
-    }
-}
+// --- Estado compartido ---
 
 static led_mode_t current_mode(void) {
     taskENTER_CRITICAL(&s_lock);
@@ -55,59 +56,91 @@ static led_mode_t current_mode(void) {
     return mode;
 }
 
-static void notify(uint32_t evt) {
+static void avisar(uint32_t aviso) {
     if (s_led_task) {
-        xTaskNotify(s_led_task, evt, eSetBits);
+        xTaskNotify(s_led_task, aviso, eSetBits);
     }
 }
 
-// Espera ms o hasta que cambie el modo (retorna true en ese caso). Ignora la actividad MQTT.
-static bool wait_mode_change(uint32_t ms) {
+// --- Primitivas del LED ---
+
+static void led_set(bool on) {
+    gpio_set_level(CONFIG_STATUS_LED_PIN, on ? CONFIG_STATUS_LED_ACTIVE_LEVEL : !CONFIG_STATUS_LED_ACTIVE_LEVEL);
+}
+
+// Espera ms, pero vuelve antes (con true) si llega un aviso de cambio de modo.
+// Los avisos de actividad MQTT no cortan la espera.
+static bool sleep_unless_mode_changes(uint32_t ms) {
     TickType_t start = xTaskGetTickCount();
     TickType_t total = pdMS_TO_TICKS(ms);
     TickType_t elapsed;
     while ((elapsed = xTaskGetTickCount() - start) < total) {
-        uint32_t events = 0;
-        if (xTaskNotifyWait(0, UINT32_MAX, &events, total - elapsed) == pdTRUE && (events & LED_EVT_MODE_CHANGED)) {
+        uint32_t avisos = 0;
+        if (xTaskNotifyWait(0, UINT32_MAX, &avisos, total - elapsed) == pdTRUE && (avisos & AVISO_CAMBIO_DE_MODO)) {
             return true;
         }
     }
     return false;
 }
 
+// Un parpadeo completo, sin interrupciones
+static void blink_once(const led_blink_t *blink) {
+    led_set(true);
+    vTaskDelay(pdMS_TO_TICKS(blink->on_ms));
+    led_set(false);
+    vTaskDelay(pdMS_TO_TICKS(blink->off_ms));
+}
+
+// --- Comportamiento de cada modo ---
+
+// INICIANDO / ESPERANDO_ACCION: parpadea hasta que cambie el modo (corta en medio del ciclo)
+static void show_continuous_blink(const led_blink_t *blink) {
+    while (true) {
+        led_set(true);
+        if (sleep_unless_mode_changes(blink->on_ms)) break;
+        led_set(false);
+        if (sleep_unless_mode_changes(blink->off_ms)) break;
+    }
+    led_set(false);
+}
+
+// EXITO: pulsos completos y vuelta a NORMAL (salvo que mientras tanto se haya pedido otro modo)
+static void show_success(void) {
+    for (int i = 0; i < CONFIG_LED_EXITO_PULSES; i++) {
+        blink_once(&BLINK_EXITO);
+    }
+
+    taskENTER_CRITICAL(&s_lock);
+    if (s_override && s_override_mode == LED_MODE_EXITO) {
+        s_override = false;
+    } else if (!s_override && s_mode == LED_MODE_EXITO) {
+        s_mode = LED_MODE_NORMAL;
+    }
+    taskEXIT_CRITICAL(&s_lock);
+}
+
+// NORMAL: apagado hasta el proximo aviso; si es de actividad MQTT, un destello corto
+static void show_normal(void) {
+    led_set(false);
+    uint32_t avisos = 0;
+    xTaskNotifyWait(0, UINT32_MAX, &avisos, portMAX_DELAY);
+    if ((avisos & AVISO_ACTIVIDAD_MQTT) && current_mode() == LED_MODE_NORMAL) {
+        blink_once(&BLINK_ACTIVIDAD);
+    }
+}
+
 static void led_task(void *pvParameters) {
     while (1) {
-        led_mode_t mode = current_mode();
-        const led_pattern_t *p = &s_patterns[mode];
-
-        if (mode == LED_MODE_NORMAL) {
-            led_set(false);
-            uint32_t events = 0;
-            xTaskNotifyWait(0, UINT32_MAX, &events, portMAX_DELAY);
-            if ((events & LED_EVT_ACTIVITY) && current_mode() == LED_MODE_NORMAL) {
-                led_blink(p->pulses, p->on_ms, p->off_ms);
-            }
-        } else if (p->pulses > 0) {
-            // Patron finito: se completa entero y despues se vuelve a NORMAL
-            led_blink(p->pulses, p->on_ms, p->off_ms);
-            taskENTER_CRITICAL(&s_lock);
-            if (s_override && s_override_mode == mode) {
-                s_override = false;
-            } else if (!s_override && s_mode == mode) {
-                s_mode = LED_MODE_NORMAL;
-            }
-            taskEXIT_CRITICAL(&s_lock);
-        } else {
-            // Parpadeo continuo: cada fase se corta si cambia el modo
-            led_set(true);
-            if (wait_mode_change(p->on_ms)) {
-                continue;
-            }
-            led_set(false);
-            wait_mode_change(p->off_ms);
+        switch (current_mode()) {
+            case LED_MODE_INICIANDO:         show_continuous_blink(&BLINK_INICIANDO);        break;
+            case LED_MODE_ESPERANDO_ACCION:  show_continuous_blink(&BLINK_ESPERANDO_ACCION); break;
+            case LED_MODE_EXITO:             show_success();                                 break;
+            case LED_MODE_NORMAL:            show_normal();                                  break;
         }
     }
 }
+
+// --- API publica ---
 
 esp_err_t led_mgr_init(void) {
     if (CONFIG_STATUS_LED_PIN == GPIO_NUM_NC) {
@@ -138,7 +171,7 @@ void led_mgr_set_mode(led_mode_t mode) {
     s_mode = mode;
     taskEXIT_CRITICAL(&s_lock);
     if (changed) {
-        notify(LED_EVT_MODE_CHANGED);
+        avisar(AVISO_CAMBIO_DE_MODO);
     }
 }
 
@@ -147,16 +180,16 @@ void led_mgr_set_override(led_mode_t mode) {
     s_override = true;
     s_override_mode = mode;
     taskEXIT_CRITICAL(&s_lock);
-    notify(LED_EVT_MODE_CHANGED);
+    avisar(AVISO_CAMBIO_DE_MODO);
 }
 
 void led_mgr_clear_override(void) {
     taskENTER_CRITICAL(&s_lock);
     s_override = false;
     taskEXIT_CRITICAL(&s_lock);
-    notify(LED_EVT_MODE_CHANGED);
+    avisar(AVISO_CAMBIO_DE_MODO);
 }
 
 void led_mgr_notify_activity(void) {
-    notify(LED_EVT_ACTIVITY);
+    avisar(AVISO_ACTIVIDAD_MQTT);
 }
