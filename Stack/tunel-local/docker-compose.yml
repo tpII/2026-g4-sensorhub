@@ -23,12 +23,9 @@ services:
       timeout: 5s
       retries: 3
     # El 443 de Traefik (que comparte este namespace) también en esta máquina,
-    # para probar sin pasar por el servidor público (ver README, "Probar en
-    # local"). Con una IP explícita: sin ella Docker publicaría también en IPv6,
-    # que puede ser alcanzable desde internet. Los puertos que publica Docker no
-    # los filtra ufw.
+    # para probar sin pasar por el servidor público dejar descomentado ports:
     ports:
-      - "${TRAEFIK_LOCAL_IP:-127.0.0.1}:443:443"
+      - "0.0.0.0:443:443"
     networks:
       - sensorhub_network
 
