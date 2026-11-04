@@ -102,10 +102,16 @@ services:
       - KC_DB_URL=jdbc:postgresql://sensorhub_keycloak_db:5432/keycloak
       - KC_DB_USERNAME=keycloak
       - KC_DB_PASSWORD=${KC_DB_PASSWORD:-}
-      # URL pública (la de los tokens y el login) y URL de la consola de
-      # administración, que no se publica en internet
-      - KC_HOSTNAME=${AUTH_PUBLIC_URL:-}
-      - KC_HOSTNAME_ADMIN=http://localhost:${KC_ADMIN_PORT:-8081}
+      # Sin hostname fijo: Keycloak arma las URLs según cómo le llega el pedido.
+      # Por Traefik, https://<AUTH_PUBLIC_URL> (de X-Forwarded-*); por
+      # http://localhost:KC_ADMIN_PORT, la consola con localhost. El realm del
+      # MCP fija su URL pública con su Frontend URL (= AUTH_PUBLIC_URL; ver
+      # keycloak/configurar-keycloak.md), así el emisor de sus tokens no
+      # depende del pedido. Con un hostname global, el realm master (el de la
+      # consola) también usaría el dominio, que Traefik no publica, y la
+      # consola no cargaría. El Host no se puede falsear: Traefik solo deja
+      # pasar el del dominio y el puerto de la consola es solo local.
+      - KC_HOSTNAME_STRICT=false
       # TLS lo termina Traefik: acá HTTP, con la URL original en X-Forwarded-*
       - KC_HTTP_ENABLED=true
       - KC_PROXY_HEADERS=xforwarded

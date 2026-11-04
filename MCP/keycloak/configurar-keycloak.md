@@ -28,6 +28,9 @@ En los pasos que siguen, `<RECURSO_MCP>` es la URL completa del endpoint MCP, `M
 
 1. En el selector de realms (arriba a la izquierda): **Create realm**.
 2. **Realm name**: `sensorhub`, igual que `KC_REALM`. **Enabled**: ON. **Create**.
+3. **Realm settings → General → Frontend URL**: `AUTH_PUBLIC_URL` de `MCP/.env`, exacta y sin `/` al final (p. ej. `https://auth.sensorhub.wgr.com.ar`). **Save**.
+
+   Es la URL con la que Keycloak arma el emisor (`iss`) de los tokens, el login y los metadatos de este realm. El servidor MCP solo acepta tokens con `iss` = `AUTH_PUBLIC_URL/realms/sensorhub`. Keycloak no tiene un hostname global (ver `KC_HOSTNAME_STRICT` en el compose): sin este campo, el emisor dependería de por dónde llegó el pedido.
 
 Después, en **Realm settings** del realm nuevo:
 
@@ -181,7 +184,7 @@ Después, conectar un cliente (el MCP Inspector es el más cómodo para probar).
 |:---|:---|
 | El cliente falla al registrarse (`Policy 'Trusted Hosts' rejected request...`) | Paso 3: no se borró la política *Trusted Hosts* |
 | Un cliente web falla al registrarse por CORS | Paso 3: falta su origen en *Allowed Registration Web Origins* |
-| Login correcto, pero el servidor responde 401 | Paso 2: la audiencia no coincide exacta con `<RECURSO_MCP>`, o `sensorhub-mcp` no es scope *Default*. También puede ser que `AUTH_PUBLIC_URL` en `.env` no coincida con la URL pública real de Keycloak (emisor distinto) |
+| Login correcto, pero el servidor responde 401 | Paso 2: la audiencia no coincide exacta con `<RECURSO_MCP>`, o `sensorhub-mcp` no es scope *Default*. También puede ser que la *Frontend URL* del realm (paso 1) no coincida exacta con `AUTH_PUBLIC_URL` de `.env` (emisor distinto) |
 | `invalid_redirect_uri` en el login | El cliente se registró con otra `redirect_uri`: borrarlo en **Clients** y volver a conectar |
 | `Account is temporarily disabled` | Protección contra fuerza bruta. Esperar, o liberar al usuario desde **Users → (usuario)** |
 
