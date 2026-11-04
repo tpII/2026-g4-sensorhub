@@ -39,7 +39,7 @@ El `41641/udp` no es obligatorio: sin él Tailscale funciona igual, pero el trá
 
 - Docker con Compose v2.
 - `/dev/net/tun` disponible (cualquier Linux actual).
-- Un registro `A` en Cloudflare por cada dominio de `rutas.conf` apuntando a esta IP, con la **nube gris** (*DNS only*).
+- El registro comodín `*.sensorhub` en Cloudflare apuntando a esta IP, con la **nube gris** (*DNS only*) (ver [`../tunel-local/README.md`](../tunel-local/README.md#2-dns-en-cloudflare)). Solo hace falta para recibir clientes: los certificados se obtienen por DNS, con este servidor expuesto o no.
 - Una auth key con `tag:sv-publico` y el *Tailnet name* (ver [`../tunel-local/README.md`](../tunel-local/README.md#1-tailscale)).
 
 ## Puesta en marcha
@@ -57,7 +57,7 @@ Copiar `rutas.conf` **antes** del primer `up`: si no existe, Docker crea una car
 ## Agregar una máquina
 
 1. Levantar el `tunel-local` de la PC nueva con su propio `TS_HOSTNAME` y una auth key con `tag:servicios`.
-2. Agregar sus dominios a `rutas.conf` y crear los registros `A` en Cloudflare.
+2. Agregar sus dominios a `rutas.conf`. Si son subdominios del comodín, en Cloudflare no hay que crear nada.
 3. Aplicar: `docker compose restart nginx`. Las conexiones abiertas de las demás PCs se cortan y se reconectan solas.
 
 ## Verificar

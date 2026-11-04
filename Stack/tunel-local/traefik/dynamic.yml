@@ -2,6 +2,9 @@
 ## SensorHub - Rutas de Traefik (proveedor file)
 ## Los dominios se leen de las variables de entorno del contenedor (MCP_DOMAIN,
 ## MQTT_DOMAIN, AUTH_DOMAIN) mediante el templating del proveedor file.
+## Los tres routers usan el mismo certificado comodín, *.CERT_DOMAIN (DNS-01,
+## ver docker-compose.yml): sus dominios tienen que ser subdominios directos de
+## CERT_DOMAIN (mcp.CERT_DOMAIN sí, a.mcp.CERT_DOMAIN no).
 ## ==============================================================================
 
 http:
@@ -16,6 +19,8 @@ http:
       service: mcp
       tls:
         certResolver: letsencrypt
+        domains:
+          - main: '*.{{ env "CERT_DOMAIN" }}'
 
     # Keycloak (servidor de autorización del MCP): solo el realm del MCP, los
     # archivos estáticos del login y los metadatos en la forma de RFC 8414
@@ -28,6 +33,8 @@ http:
       service: keycloak
       tls:
         certResolver: letsencrypt
+        domains:
+          - main: '*.{{ env "CERT_DOMAIN" }}'
 
   services:
     mcp:
@@ -49,6 +56,8 @@ tcp:
       service: emqx
       tls:
         certResolver: letsencrypt
+        domains:
+          - main: '*.{{ env "CERT_DOMAIN" }}'
 
   services:
     emqx:

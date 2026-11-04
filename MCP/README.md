@@ -102,7 +102,7 @@ En `.env`:
 | `KC_ADMIN_USERNAME` / `KC_ADMIN_PASSWORD` | Administrador de Keycloak. Se crea en el primer arranque, con la base vacía |
 | `KC_DB_PASSWORD` | Contraseña de la base de Keycloak |
 
-Además, el dominio de `MCP_PUBLIC_URL` tiene que estar en `MCP_ALLOWED_HOSTS` (p. ej. `mcp.ejemplo.com`) y en `MCP_ALLOWED_ORIGINS` (`https://mcp.ejemplo.com`). El dominio de Keycloak necesita su registro DNS, su línea en `sv-publico/rutas.conf` y `AUTH_DOMAIN` en `Stack/tunel-local/.env`.
+Además, el dominio de `MCP_PUBLIC_URL` tiene que estar en `MCP_ALLOWED_HOSTS` (p. ej. `mcp.ejemplo.com`) y en `MCP_ALLOWED_ORIGINS` (`https://mcp.ejemplo.com`). El dominio de Keycloak necesita su línea en `sv-publico/rutas.conf` y `AUTH_DOMAIN` en `Stack/tunel-local/.env`; el DNS y el certificado los cubre el comodín de `CERT_DOMAIN`.
 
 El realm se configura a mano desde la consola de administración, una sola vez (queda en la base de Keycloak): ver [`keycloak/configurar-keycloak.md`](keycloak/configurar-keycloak.md). En resumen:
 

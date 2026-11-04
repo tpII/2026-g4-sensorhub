@@ -1,6 +1,6 @@
 # Configurar Keycloak para el servidor MCP
 
-Guía para dejar Keycloak listo, a mano desde la consola de administración, para que claude.ai, ChatGPT, Claude Code o el MCP Inspector se conecten al servidor MCP de SensorHub.
+Guía para dejar Keycloak listo, a mano desde la consola de administración, para que modelos clientes como claude.ai, ChatGPT, Claude Code o el MCP Inspector se conecten al servidor MCP de SensorHub.
 
 ## Qué hay que crear (y qué no)
 
@@ -11,7 +11,7 @@ Guía para dejar Keycloak listo, a mano desde la consola de administración, par
 | **Registro dinámico de clientes** (políticas de *Client registration*) | Sí | Los clientes MCP se registran solos la primera vez que se conectan. Con la configuración de fábrica, Keycloak rechaza ese registro |
 | **Política de PKCE** | Recomendado | OAuth 2.1 exige PKCE `S256`. Los clientes MCP ya lo usan; la política lo hace obligatorio |
 | **Usuario** | Sí, uno por persona | Es quien inicia sesión al conectar el cliente |
-| Clients | **No** | Cada cliente (claude.ai, ChatGPT...) crea el suyo al registrarse. No hay que crear ninguno a mano |
+| Clients | **No** | Cada cliente crea el suyo al registrarse. No hay que crear ninguno a mano |
 | Roles o grupos | **No** | El servidor MCP no lee roles. Como el realm es solo del MCP, tener usuario habilitado ya equivale a tener acceso (ver [Agregar otro usuario](#6-agregar-otro-usuario)) |
 
 ## 0. Antes de empezar
@@ -51,7 +51,32 @@ Las sesiones largas evitan que los conectores pidan login cada pocas horas: el r
 
 ## 2. Client scope con la audiencia del MCP
 
-Así todos los tokens del realm salen con `aud = <RECURSO_MCP>`, que es lo que verifica el servidor (RFC 8707).
+### Qué es la audiencia y por qué hace falta
+
+La audiencia es el campo `aud` del access token: dice **para qué servicio se emitió el token**. Es el destinatario, así como `iss` (el emisor) es el remitente. Un token que Keycloak emite para un cliente se ve más o menos así:
+
+```json
+{
+  "iss": "https://auth.ejemplo.com/realms/sensorhub",
+  "aud": "https://mcp.ejemplo.com/mcp",
+  "sub": "id-del-usuario",
+  "azp": "id-del-cliente (claude.ai, ChatGPT...)",
+  "exp": 1793750400
+}
+```
+
+En cada pedido, el servidor MCP ([`verifier.py`](../sensorhub_mcp/auth/verifier.py)) comprueba la firma, el emisor y el vencimiento. Además exige que `aud` sea exactamente `<RECURSO_MCP>`. La [especificación de autorización de MCP](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization) obliga a hacer esta comprobación: el cliente pide el token para un recurso concreto (RFC 8707) y el servidor rechaza los tokens que no son para él.
+
+Esta comprobación hace que un token sirva solo para el servicio para el que se emitió. Sin ella, al MCP le serviría cualquier token válido del realm:
+
+- Si el mismo Keycloak se usa mañana para otra aplicación (p. ej. un dashboard), un token de esa aplicación permitiría también operar los actuadores.
+- Un servicio que recibió un token tuyo para otra cosa podría reenviarlo al MCP y usarlo en tu nombre.
+
+**Por qué hay que configurarla:** Keycloak no pone la URL del MCP en `aud` por su cuenta. En sus tokens, `aud` queda vacío o con `account`, así que el servidor los rechazaría todos. El client scope de este paso agrega la audiencia con un mapper. Como el scope es *Default*, lo reciben todos los clientes, incluidos los que se registran solos. No hay un client al que asignárselo a mano.
+
+**Consecuencia práctica:** la audiencia del mapper tiene que coincidir **exactamente** con `MCP_PUBLIC_URL` + `MCP_HTTP_PATH`. Si no coincide, el login funciona pero el MCP responde 401 a todos los pedidos.
+
+### Configuración
 
 1. **Client scopes → Create client scope**:
    - **Name**: `sensorhub-mcp`
@@ -95,7 +120,7 @@ La idea es que **cualquier cliente MCP** pueda registrarse. Lo que protege el ac
 
 > **El riesgo de abrir el registro:** un tercero puede registrar un cliente que se llame, por ejemplo, "Claude", y apunte a un dominio suyo. Después te manda el enlace de login. Si iniciás sesión **y aceptás el consentimiento**, ese tercero obtiene un token para usar el MCP. Por eso, en la pantalla de consentimiento conviene mirar la dirección a la que vuelve el login (la barra del navegador, al terminar). Si no iniciaste vos la conexión desde un cliente, rechazá el pedido. También conviene revisar de vez en cuando **Clients** y borrar los que no reconozcas.
 >
-> Si preferís cerrar el registro a ciertos clientes, en vez de borrar *Trusted Hosts* hay que editarla: **Host Sending Client Registration Request Must Match** en OFF, los hosts permitidos en **Trusted Hosts** (p. ej. `claude.ai`, `chatgpt.com`, `localhost`, `127.0.0.1`) y **Client URIs Must Match** en ON.
+> Si se prefiere cerrar el registro a ciertos clientes, en vez de borrar *Trusted Hosts* hay que editarla: **Host Sending Client Registration Request Must Match** en OFF, los hosts permitidos en **Trusted Hosts** (p. ej. `claude.ai`, `chatgpt.com`, `localhost`, `127.0.0.1`) y **Client URIs Must Match** en ON.
 
 ## 4. PKCE obligatorio
 
