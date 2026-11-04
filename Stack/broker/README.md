@@ -69,7 +69,7 @@ actions {
 }
 ```
 
-- **Nota:** InfluxDB v2 requiere Line Protocol plano (`text/plain`). Separamos tags indexables (`device_type`, `device_id`) de los campos de medición. Para actuadores y sensores discretos (`switch` y `pir`), se envían dos campos simultáneos: el semántico (`state="on"` o `motion=true`) y el numérico entero (`value=1i` o `value=0i`), garantizando compatibilidad total tanto con agentes de IA/MCP como con gráficos continuos y agregaciones matemáticas (`mean`) en InfluxDB y Grafana.
+- **Nota:** InfluxDB v2 requiere Line Protocol plano (`text/plain`). Se separan los tags indexables (`device_type`, `device_id`) de los campos de medición. Para actuadores y sensores discretos (`switch` y `pir`), se envían dos campos simultáneos: el semántico (`state="on"` o `motion=true`) y el numérico entero (`value=1i` o `value=0i`), garantizando compatibilidad total tanto con agentes de IA/MCP como con gráficos continuos y agregaciones matemáticas (`mean`) en InfluxDB y Grafana.
 
 ### 3. Reglas del Motor SQL (`rule_engine.rules.<nombre>`)
 

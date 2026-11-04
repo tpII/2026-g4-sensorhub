@@ -132,11 +132,11 @@ En todos los casos se usa la URL pública completa, `https://<dominio>/mcp`, sin
 - **Claude Code**: `claude mcp add --transport http sensorhub https://<dominio>/mcp`, y después `/mcp` para iniciar el login.
 - **MCP Inspector**: ver más abajo, en «Cómo probarlo».
 
-Después del login, Keycloak muestra qué cliente pide acceso. Si no reconocés el pedido, rechazalo.
+Después del login, Keycloak muestra qué cliente pide acceso. Si el pedido no se reconoce, hay que rechazarlo.
 
 ### Desarrollo local sin autenticación
 
-Con autenticación activa, todas las URLs del servidor, incluida `http://localhost:8000/mcp`, exigen token, y el login redirige siempre al dominio de `AUTH_PUBLIC_URL`. Para probar en local sin dominio, poné `MCP_AUTH_ENABLED=false` en `.env` y recreá el contenedor (`docker compose up -d mcp-server`). Así el servidor queda abierto, como antes de la autenticación; no lo dejes así si es alcanzable desde afuera. Keycloak puede quedar apagado (`docker compose stop keycloak keycloak-db`).
+Con autenticación activa, todas las URLs del servidor, incluida `http://localhost:8000/mcp`, exigen token, y el login redirige siempre al dominio de `AUTH_PUBLIC_URL`. Para probar en local sin dominio, se pone `MCP_AUTH_ENABLED=false` en `.env` y se recrea el contenedor (`docker compose up -d mcp-server`). Así el servidor queda abierto, como antes de la autenticación, y no debe quedar así si es alcanzable desde afuera. Keycloak puede quedar apagado (`docker compose stop keycloak keycloak-db`).
 
 ## Cómo probarlo
 
@@ -186,7 +186,7 @@ cd MCP
 docker compose up -d mcp-inspector
 ```
 
-Abri `http://localhost:6274` en el navegador. Como corre en la misma red que `mcp-server`, para conectarlo hay que usar el nombre del contenedor, no `localhost`: **`http://sensorhub_mcp:8000/mcp`** (con `MCP_AUTH_ENABLED=false`).
+Se abre `http://localhost:6274` en el navegador. Como corre en la misma red que `mcp-server`, para conectarlo hay que usar el nombre del contenedor, no `localhost`: **`http://sensorhub_mcp:8000/mcp`** (con `MCP_AUTH_ENABLED=false`).
 
 **Con autenticación activa**, se conecta a la URL pública, igual que un cliente externo:
 

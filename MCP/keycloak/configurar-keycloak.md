@@ -28,7 +28,7 @@ Keycloak arranca con `--import-realm` y lee [`realm-sensorhub.json`](realm-senso
 
 Los pasos 1 a 4 sirven para entender qué hay en el realm o para armarlo a mano.
 
-**Ojo con los cambios de URL:** el JSON solo se aplica al crear el realm. Si después cambian `AUTH_PUBLIC_URL` o `MCP_PUBLIC_URL`, el realm queda con los valores viejos. Hay que actualizarlos desde la consola (*Frontend URL* del paso 1 y la audiencia del paso 2) o borrar el volumen para que se vuelva a importar.
+**Cambios de URL:** el JSON solo se aplica al crear el realm. Si después se cambia `AUTH_PUBLIC_URL` o `MCP_PUBLIC_URL`, el realm queda con los valores viejos. Hay que actualizarlos desde la consola (*Frontend URL* del paso 1 y la audiencia del paso 2) o borrar el volumen para que se vuelva a importar.
 
 **Para regenerar el JSON** después de cambiar algo desde la consola: *Realm settings → Action → Partial export*, con grupos, roles y clientes. Después hay que:
 
@@ -95,7 +95,7 @@ En cada pedido, el servidor MCP ([`verifier.py`](../sensorhub_mcp/auth/verifier.
 Esta comprobación hace que un token sirva solo para el servicio para el que se emitió. Sin ella, al MCP le serviría cualquier token válido del realm:
 
 - Si el mismo Keycloak se usa mañana para otra aplicación (p. ej. un dashboard), un token de esa aplicación permitiría también operar los actuadores.
-- Un servicio que recibió un token tuyo para otra cosa podría reenviarlo al MCP y usarlo en tu nombre.
+- Un servicio que recibió un token de un usuario para otra cosa podría reenviarlo al MCP y usarlo en su nombre.
 
 **Por qué hay que configurarla:** Keycloak no pone la URL del MCP en `aud` por su cuenta. En sus tokens, `aud` queda vacío o con `account`, así que el servidor los rechazaría todos. El client scope de este paso agrega la audiencia con un mapper. Como el scope es *Default*, lo reciben todos los clientes, incluidos los que se registran solos. No hay un client al que asignárselo a mano.
 
@@ -135,7 +135,7 @@ La idea es que **cualquier cliente MCP** pueda registrarse. Lo que protege el ac
 1. **Trusted Hosts**: **borrarla** (menú ⋮ o ícono de papelera → *Delete*). Esta política solo acepta registros que vienen de una lista de hosts o IPs, y con la configuración de fábrica (lista vacía) bloquea a todos los clientes.
 2. **Allowed Registration Web Origins**:
    - **Web Origins**: `http://localhost:6274`, el MCP Inspector.
-   - Solo afecta a los clientes que se registran desde una página web en el navegador, por CORS. claude.ai, ChatGPT y Claude Code se registran desde su servidor o su programa y no pasan por acá. Si algún día usás otro cliente web, se suma su origen.
+   - Solo afecta a los clientes que se registran desde una página web en el navegador, por CORS. claude.ai, ChatGPT y Claude Code se registran desde su servidor o su programa y no pasan por acá. Si en algún momento se usa otro cliente web, se suma su origen.
    - **Save**.
 3. Las demás políticas quedan como vienen, y conviene no tocarlas:
    - **Consent Required**: cada cliente nuevo muestra, después del login, qué aplicación pide acceso. Es la defensa principal ahora que cualquiera puede registrar un cliente (ver abajo).
@@ -143,7 +143,7 @@ La idea es que **cualquier cliente MCP** pueda registrarse. Lo que protege el ac
    - **Max Clients Limit** (200 por defecto): pone un tope a cuántos clientes puede crear alguien registrando en masa.
    - **Full Scope Disabled** y **Allowed Protocol Mapper Types**: impiden que un cliente se registre pidiendo más permisos o mappers propios.
 
-> **El riesgo de abrir el registro:** un tercero puede registrar un cliente que se llame, por ejemplo, "Claude", y apunte a un dominio suyo. Después te manda el enlace de login. Si iniciás sesión **y aceptás el consentimiento**, ese tercero obtiene un token para usar el MCP. Por eso, en la pantalla de consentimiento conviene mirar la dirección a la que vuelve el login (la barra del navegador, al terminar). Si no iniciaste vos la conexión desde un cliente, rechazá el pedido. También conviene revisar de vez en cuando **Clients** y borrar los que no reconozcas.
+> **El riesgo de abrir el registro:** un tercero puede registrar un cliente que se llame, por ejemplo, "Claude", y apunte a un dominio suyo. Después le manda el enlace de login a un usuario del realm. Si el usuario inicia sesión **y acepta el consentimiento**, ese tercero obtiene un token para usar el MCP. Por eso, en la pantalla de consentimiento conviene mirar la dirección a la que vuelve el login (la barra del navegador, al terminar). Si la conexión no se inició desde un cliente propio, hay que rechazar el pedido. También conviene revisar de vez en cuando **Clients** y borrar los que no se reconozcan.
 >
 > Si se prefiere cerrar el registro a ciertos clientes, en vez de borrar *Trusted Hosts* hay que editarla: **Host Sending Client Registration Request Must Match** en OFF, los hosts permitidos en **Trusted Hosts** (p. ej. `claude.ai`, `chatgpt.com`, `localhost`, `127.0.0.1`) y **Client URIs Must Match** en ON.
 
@@ -168,7 +168,7 @@ La idea es que **cualquier cliente MCP** pueda registrarse. Lo que protege el ac
    - **Create**.
 2. Pestaña **Credentials → Set password**:
    - Una contraseña de 12 caracteres como mínimo.
-   - **Temporary**: OFF si la contraseña es tuya. ON si se la pasás a otra persona, para que la cambie en su primer login.
+   - **Temporary**: OFF si la contraseña la usa quien crea el usuario. ON si se le pasa a otra persona, para que la cambie en su primer login.
    - **Save**.
 
 Con esto ya se puede conectar un cliente (ver [Conectar un cliente](../README.md#conectar-un-cliente)).
