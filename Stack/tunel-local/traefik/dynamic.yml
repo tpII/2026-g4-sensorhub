@@ -1,20 +1,31 @@
 ## ==============================================================================
 ## SensorHub - Rutas de Traefik (proveedor file)
 ## Los dominios se leen de las variables de entorno del contenedor (MCP_DOMAIN,
-## MQTT_DOMAIN) mediante el templating del proveedor file.
+## MQTT_DOMAIN, AUTH_DOMAIN) mediante el templating del proveedor file.
 ## ==============================================================================
 
 http:
   routers:
-    # MCP: HTTPS terminado acá, HTTP plano hacia el contenedor. Además del
-    # endpoint MCP pasan las rutas de OAuth que sirve el mismo servidor:
-    # metadatos (/.well-known/oauth-*), /authorize, /token, /register y el login.
-    # La regla va en una sola línea: Traefik no acepta saltos de línea adentro.
+    # MCP: HTTPS terminado acá, HTTP plano hacia el contenedor. Pasan el
+    # endpoint MCP y sus Protected Resource Metadata (RFC 9728), que apuntan a
+    # Keycloak. La regla va en una sola línea: Traefik no acepta saltos de línea.
     mcp:
-      rule: 'Host(`{{ env "MCP_DOMAIN" }}`) && (PathPrefix(`{{ env "MCP_HTTP_PATH" }}`) || PathPrefix(`/.well-known/oauth-`) || Path(`/authorize`) || Path(`/token`) || Path(`/register`) || Path(`/oauth/login`))'
+      rule: 'Host(`{{ env "MCP_DOMAIN" }}`) && (PathPrefix(`{{ env "MCP_HTTP_PATH" }}`) || PathPrefix(`/.well-known/oauth-protected-resource`))'
       entryPoints:
         - websecure
       service: mcp
+      tls:
+        certResolver: letsencrypt
+
+    # Keycloak (servidor de autorización del MCP): solo el realm del MCP, los
+    # archivos estáticos del login y los metadatos en la forma de RFC 8414
+    # (/.well-known/oauth-authorization-server/realms/<realm>). La consola de
+    # administración y el realm master no se publican.
+    auth:
+      rule: 'Host(`{{ env "AUTH_DOMAIN" }}`) && (PathPrefix(`/realms/{{ env "KC_REALM" }}/`) || PathPrefix(`/resources/`) || Path(`/.well-known/oauth-authorization-server/realms/{{ env "KC_REALM" }}`))'
+      entryPoints:
+        - websecure
+      service: keycloak
       tls:
         certResolver: letsencrypt
 
@@ -23,6 +34,10 @@ http:
       loadBalancer:
         servers:
           - url: "http://sensorhub_mcp:8000"
+    keycloak:
+      loadBalancer:
+        servers:
+          - url: "http://sensorhub_keycloak:8080"
 
 tcp:
   routers:

@@ -8,3 +8,5 @@ pydantic>=2.12
 paho-mqtt>=1.6.1,<2.0.0
 influxdb-client>=1.36.0
 python-dotenv>=1.0.0
+# Verificación de los JWT de Keycloak (auth/verifier.py); [crypto] trae RS256
+PyJWT[crypto]>=2.10,<3

@@ -1,80 +1,58 @@
-"""Autenticación OAuth 2.1 de un solo usuario para el servidor MCP.
+"""Autenticación OAuth 2.1 del servidor MCP, delegada en Keycloak.
 
-El propio servidor hace de servidor de autorización: los clientes (claude.ai,
-ChatGPT, Claude Code, etc.) se registran solos, mandan al usuario a una
-pantalla de login con una única contraseña (MCP_AUTH_PASSWORD) y obtienen
-tokens con los que llaman al endpoint MCP. No guarda nada: los tokens y los
-clientes registrados van firmados, así que arranca en frío solo con el .env y
-un reinicio no corta ninguna sesión.
+Keycloak es el servidor de autorización: registra a los clientes (claude.ai,
+ChatGPT, Claude Code, etc.), muestra el login y emite los tokens. El servidor
+MCP es solo el servidor de recursos: publica sus Protected Resource Metadata
+(RFC 9728), que apuntan al realm de Keycloak, y verifica el token de cada
+pedido (verifier.py). La configuración del realm está en MCP/keycloak/.
 
 Uso desde mcp_app.py:
 
-    provider = build_oauth_provider()                    # None si está desactivada
-    mcp = MCPServer(..., **oauth_server_options(provider))
-    if provider:
-        register_login_routes(mcp, provider)
+    verifier = build_token_verifier()                   # None si está desactivada
+    mcp = MCPServer(..., **oauth_server_options(verifier))
 """
 
 import logging
 from typing import Any
 
-from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
+from mcp.server.auth.settings import AuthSettings
 
-from ..config import (
-    MCP_AUTH_ENABLED,
-    MCP_AUTH_PASSWORD,
-    MCP_AUTH_SECRET,
-    MCP_HTTP_PATH,
-    MCP_PUBLIC_URL,
-)
-from .login import register_login_routes
-from .provider import SingleUserOAuthProvider
+from ..config import MCP_AUTH_ENABLED, MCP_AUTH_ISSUER, MCP_AUTH_JWKS_URL, MCP_HTTP_PATH, MCP_PUBLIC_URL
+from .verifier import KeycloakTokenVerifier
 
-__all__ = ["build_oauth_provider", "oauth_server_options", "register_login_routes"]
+__all__ = ["build_token_verifier", "oauth_server_options"]
 
 logger = logging.getLogger(__name__)
 
-MIN_PASSWORD_LENGTH = 12
-MIN_SECRET_LENGTH = 32
-
 
 class AuthConfigError(RuntimeError):
-    """Configuración de autenticación incompleta o insegura."""
+    """Configuración de autenticación incompleta."""
 
 
-def build_oauth_provider() -> SingleUserOAuthProvider | None:
+def build_token_verifier() -> KeycloakTokenVerifier | None:
     if not MCP_AUTH_ENABLED:
         logger.warning("Autenticación DESACTIVADA (MCP_AUTH_ENABLED=false): cualquiera que llegue al servidor puede usarlo")
         return None
-    if not MCP_PUBLIC_URL:
+    if not MCP_PUBLIC_URL.startswith(("https://", "http://")):
         raise AuthConfigError("Falta MCP_PUBLIC_URL (p. ej. https://mcp.ejemplo.com)")
-    if len(MCP_AUTH_PASSWORD) < MIN_PASSWORD_LENGTH:
-        raise AuthConfigError(f"MCP_AUTH_PASSWORD tiene que tener al menos {MIN_PASSWORD_LENGTH} caracteres")
-    if len(MCP_AUTH_SECRET) < MIN_SECRET_LENGTH:
-        raise AuthConfigError(f"MCP_AUTH_SECRET tiene que tener al menos {MIN_SECRET_LENGTH} caracteres (openssl rand -hex 32)")
-    if MCP_AUTH_SECRET == MCP_AUTH_PASSWORD:
-        raise AuthConfigError("MCP_AUTH_SECRET y MCP_AUTH_PASSWORD tienen que ser distintos")
-    return SingleUserOAuthProvider(
-        issuer_url=MCP_PUBLIC_URL,
+    if not MCP_AUTH_ISSUER.startswith(("https://", "http://")):
+        raise AuthConfigError("Falta MCP_AUTH_ISSUER, el realm de Keycloak (p. ej. https://auth.ejemplo.com/realms/sensorhub)")
+    return KeycloakTokenVerifier(
+        issuer=MCP_AUTH_ISSUER,
+        jwks_url=MCP_AUTH_JWKS_URL or f"{MCP_AUTH_ISSUER}/protocol/openid-connect/certs",
         resource_url=MCP_PUBLIC_URL + MCP_HTTP_PATH,
-        password=MCP_AUTH_PASSWORD,
-        secret=MCP_AUTH_SECRET,
     )
 
 
-def oauth_server_options(provider: SingleUserOAuthProvider | None) -> dict[str, Any]:
+def oauth_server_options(verifier: KeycloakTokenVerifier | None) -> dict[str, Any]:
     """Argumentos de MCPServer para activar OAuth (vacío si está desactivada)."""
-    if provider is None:
+    if verifier is None:
         return {}
     return {
-        "auth_server_provider": provider,
+        "token_verifier": verifier,
         "auth": AuthSettings(
-            issuer_url=provider.issuer_url,
-            resource_server_url=provider.resource_url,
-            # Registro dinámico abierto (lo usan claude.ai y ChatGPT) y sin scopes:
-            # hay un único usuario con acceso a todo
-            client_registration_options=ClientRegistrationOptions(enabled=True),
-            revocation_options=RevocationOptions(enabled=False),
+            issuer_url=verifier.issuer,
+            resource_server_url=verifier.resource_url,
             # Solo se aceptan tokens emitidos para este endpoint MCP (RFC 8707)
             validate_token_resource=True,
         ),

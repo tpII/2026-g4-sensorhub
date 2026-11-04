@@ -9,7 +9,9 @@ MCP/
 ├── .env.example           # Plantilla de variables de entorno
 ├── .env                    # Variables activas (ignorado por Git)
 ├── devices.csv             # Registro manual de dispositivos (device_type, device_id, nombre amigable)
-├── docker-compose.yml      # Levanta el servidor y, opcionalmente, el MCP Inspector
+├── docker-compose.yml      # Levanta el servidor, Keycloak y, opcionalmente, el MCP Inspector
+├── keycloak/
+│   └── configurar-keycloak.md # Cómo configurar a mano el realm de Keycloak (usuarios, audiencia, registro de clientes, PKCE)
 ├── Dockerfile
 ├── requirements.txt
 └── sensorhub_mcp/          # El paquete Python del servidor
@@ -21,12 +23,9 @@ MCP/
     ├── devices.py            # Registro y resolución de device_id
     ├── timeutils.py          # Zona horaria y formato de fechas para Flux
     ├── main.py / __main__.py # Punto de entrada
-    ├── auth/                  # Autenticación OAuth 2.1 de un solo usuario (ver "Autenticación")
+    ├── auth/                  # Autenticación OAuth 2.1 con Keycloak (ver "Autenticación")
     │   ├── __init__.py         # Validación de la configuración y opciones para MCPServer
-    │   ├── provider.py         # Servidor de autorización (interfaz OAuthAuthorizationServerProvider del SDK)
-    │   ├── login.py            # Pantalla de login (/oauth/login)
-    │   ├── tokens.py           # Access y refresh tokens firmados con HMAC
-    │   └── clients.py          # Clientes registrados (DCR) sin estado: el client_id va firmado
+    │   └── verifier.py         # Verificación de los JWT de Keycloak (firma, emisor, audiencia)
     └── tools/                 # Las tools expuestas al LLM (common.py: tipos y helpers compartidos)
 ```
 
@@ -76,7 +75,19 @@ En ambos casos, el servidor queda escuchando en `http://<MCP_HOST>:<MCP_PORT><MC
 
 ## Autenticación (OAuth 2.1)
 
-El servidor exige autenticación por defecto (`MCP_AUTH_ENABLED=true`) y no arranca si falta su configuración. Sigue la [especificación de autorización de MCP](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization): el propio servidor hace de servidor de autorización OAuth 2.1 para un único usuario. Los clientes (claude.ai, ChatGPT, Claude Code, MCP Inspector) se registran solos y abren una pantalla de login, donde se ingresa una sola contraseña. Después obtienen tokens con los que llaman a `/mcp`. Informacion completa en la pagina de la wiki, página 05, sección 5 ([Servidor MCP y LLM](https://github.com/tpII/2026-g4-sensorhub/wiki/05-Servidor-MCP-y-LLM)).
+El servidor exige autenticación por defecto (`MCP_AUTH_ENABLED=true`) y no arranca si falta su configuración. Sigue la [especificación de autorización de MCP](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization), con [Keycloak](https://www.keycloak.org/securing-apps/mcp-authz-server) como servidor de autorización:
+
+- **Keycloak** registra a los clientes (claude.ai, ChatGPT, Claude Code, MCP Inspector), muestra el login y emite los tokens. Tiene un realm dedicado al MCP: todo usuario habilitado en él tiene acceso.
+- **El servidor MCP** solo es servidor de recursos. Publica sus metadatos (RFC 9728), que apuntan a Keycloak, y en cada pedido verifica el token: firma con las claves públicas de Keycloak, emisor, vencimiento y que la audiencia sea este endpoint.
+
+Información completa en la wiki, página 05, sección 5 ([Servidor MCP y LLM](https://github.com/tpII/2026-g4-sensorhub/wiki/05-Servidor-MCP-y-LLM)).
+
+`docker compose up -d` levanta dos servicios además del MCP:
+
+| Servicio | Qué hace |
+|:---|:---|
+| `keycloak-db` | Postgres de Keycloak, en el volumen `sensorhub_keycloak_db`: clientes registrados, sesiones y claves de firma. Sin él, cada recreación obligaría a volver a agregar los conectores |
+| `keycloak` | El servidor de autorización. Se publica en `AUTH_PUBLIC_URL` a través de Traefik ([`../Stack/tunel-local`](../Stack/tunel-local/README.md)); la consola de administración, solo en `http://localhost:8081` |
 
 ### Configuración
 
@@ -85,35 +96,46 @@ En `.env`:
 | Variable | Valor |
 |:---|:---|
 | `MCP_AUTH_ENABLED` | `true` (por defecto). Con `false` el servidor queda abierto: solo para desarrollo local |
-| `MCP_PUBLIC_URL` | URL pública del servidor, **sin** path (p. ej. `https://mcp.ejemplo.com`). Es el *issuer* de OAuth; el endpoint protegido es `MCP_PUBLIC_URL` + `MCP_HTTP_PATH` |
-| `MCP_AUTH_PASSWORD` | Contraseña de la pantalla de login, de 12 caracteres como mínimo |
-| `MCP_AUTH_SECRET` | Clave para firmar tokens y clientes: aleatoria, de 32 caracteres como mínimo y distinta de la contraseña. Se genera con `openssl rand -hex 32` |
+| `MCP_PUBLIC_URL` | URL pública del servidor, **sin** path (p. ej. `https://mcp.ejemplo.com`). `MCP_PUBLIC_URL` + `MCP_HTTP_PATH` es el recurso protegido: la audiencia que tienen que traer los tokens |
+| `AUTH_PUBLIC_URL` | URL pública de Keycloak, sin path (p. ej. `https://auth.ejemplo.com`). El *issuer* queda en `AUTH_PUBLIC_URL/realms/KC_REALM` |
+| `KC_REALM` | Realm de Keycloak (por defecto `sensorhub`) |
+| `KC_ADMIN_USERNAME` / `KC_ADMIN_PASSWORD` | Administrador de Keycloak. Se crea en el primer arranque, con la base vacía |
+| `KC_DB_PASSWORD` | Contraseña de la base de Keycloak |
 
-Además, el dominio de `MCP_PUBLIC_URL` tiene que estar en `MCP_ALLOWED_HOSTS` (p. ej. `mcp.ejemplo.com`) y en `MCP_ALLOWED_ORIGINS` (`https://mcp.ejemplo.com`).
+Además, el dominio de `MCP_PUBLIC_URL` tiene que estar en `MCP_ALLOWED_HOSTS` (p. ej. `mcp.ejemplo.com`) y en `MCP_ALLOWED_ORIGINS` (`https://mcp.ejemplo.com`). El dominio de Keycloak necesita su registro DNS, su línea en `sv-publico/rutas.conf` y `AUTH_DOMAIN` en `Stack/tunel-local/.env`.
 
-No hace falta ningún volumen ni base de datos: los tokens y los clientes registrados van firmados, así que un reinicio o un `docker compose up --force-recreate` no desconecta a nadie. Para cambiar las credenciales:
+El realm se configura a mano desde la consola de administración, una sola vez (queda en la base de Keycloak): ver [`keycloak/configurar-keycloak.md`](keycloak/configurar-keycloak.md). En resumen:
 
-| Qué se cambia | Qué pasa |
+- **Realm** `KC_REALM`, sin registro de usuarios ni recuperación de contraseña, con protección contra fuerza bruta.
+- **Audiencia:** un client scope por defecto, `sensorhub-mcp`, que pone `aud = MCP_PUBLIC_URL + MCP_HTTP_PATH` en los tokens de todos los clientes.
+- **Registro dinámico (DCR):** anónimo y abierto: cualquier cliente MCP puede registrarse. El acceso lo protegen el login y la pantalla de consentimiento que muestra cada cliente nuevo.
+- **PKCE `S256`:** obligatorio para todos los clientes.
+- **Usuarios:** los crea el administrador, uno por persona. No hacen falta clients ni roles.
+
+| Qué se cambia | Cómo |
 |:---|:---|
-| `MCP_AUTH_PASSWORD` | Se cierran todas las sesiones. Los conectores siguen configurados con la misma URL y piden login de nuevo |
-| `MCP_AUTH_SECRET` | Se invalidan también los clientes registrados: hay que quitar y volver a agregar el conector en cada cliente |
+| Agregar un usuario | Consola, *Users → Add user* y *Credentials → Set password* (con *Temporary* ON, para que la cambie en su primer login) |
+| Contraseña de un usuario | Consola, *Users → (usuario) → Credentials → Reset password*. Para cerrar las sesiones abiertas: *Sessions → Sign out* |
+| Quitar el acceso a un usuario | Consola, *Users → (usuario) → Enabled* OFF, y *Sessions → Sign out* |
+| Revocar un conector | Consola, *Clients*: borrar el cliente con el nombre del conector, o cerrar su sesión |
+| Contraseña del administrador | Desde la consola. `KC_ADMIN_PASSWORD` solo se usa al crear la base |
 
-Si el servidor se publica detrás de un proxy, además de `MCP_HTTP_PATH` tiene que dejar pasar las rutas de OAuth: `/.well-known/oauth-*`, `/authorize`, `/token`, `/register` y `/oauth/login`.
+La consola de administración está en `http://localhost:8081`, solo desde esta máquina. Traefik publica únicamente el realm del MCP, los archivos estáticos del login y los metadatos.
 
 ### Conectar un cliente
 
 En todos los casos se usa la URL pública completa, `https://<dominio>/mcp`, sin credenciales en la URL:
 
-- **claude.ai** (y Claude Desktop o móvil): *Settings → Connectors → Add custom connector*, con la URL y sin completar Client ID ni Client Secret. Al conectar se abre la pantalla de login de SensorHub. Ver [Add a connector that isn't in the directory](https://claude.com/docs/connectors/custom/remote-mcp).
+- **claude.ai** (y Claude Desktop o móvil): *Settings → Connectors → Add custom connector*, con la URL y sin completar Client ID ni Client Secret. Al conectar se abre el login de Keycloak. Ver [Add a connector that isn't in the directory](https://claude.com/docs/connectors/custom/remote-mcp).
 - **ChatGPT**: se agrega como app o conector con la URL, eligiendo OAuth. ChatGPT se registra por DCR. Ver [Apps SDK — Authentication](https://developers.openai.com/apps-sdk/build/auth).
 - **Claude Code**: `claude mcp add --transport http sensorhub https://<dominio>/mcp`, y después `/mcp` para iniciar el login.
 - **MCP Inspector**: ver más abajo, en «Cómo probarlo».
 
-La pantalla de login muestra qué cliente pide acceso y a qué sitio va a volver. Si no reconocés el pedido, no ingreses la contraseña. Tras una contraseña incorrecta hay una demora de 1 s, y después de 5 intentos el pedido se descarta y hay que volver a conectar desde el cliente.
+Después del login, Keycloak muestra qué cliente pide acceso. Si no reconocés el pedido, rechazalo.
 
 ### Desarrollo local sin autenticación
 
-Con autenticación activa, todas las URLs del servidor, incluida `http://localhost:8000/mcp`, exigen token, y el login redirige siempre al dominio de `MCP_PUBLIC_URL`. Para probar en local sin dominio, poné `MCP_AUTH_ENABLED=false` en `.env` y recreá el contenedor (`docker compose up -d mcp-server`). Así el servidor queda abierto, como antes de la autenticación; no lo dejes así si es alcanzable desde afuera.
+Con autenticación activa, todas las URLs del servidor, incluida `http://localhost:8000/mcp`, exigen token, y el login redirige siempre al dominio de `AUTH_PUBLIC_URL`. Para probar en local sin dominio, poné `MCP_AUTH_ENABLED=false` en `.env` y recreá el contenedor (`docker compose up -d mcp-server`). Así el servidor queda abierto, como antes de la autenticación; no lo dejes así si es alcanzable desde afuera. Keycloak puede quedar apagado (`docker compose stop keycloak keycloak-db`).
 
 ## Cómo probarlo
 
@@ -169,9 +191,9 @@ Abri `http://localhost:6274` en el navegador. Como corre en la misma red que `mc
 
 1. *Transport Type* `Streamable HTTP` y URL `https://<dominio>/mcp`.
 2. En *OAuth Settings*, Client ID, Client Secret y Scopes vacíos (si el navegador autocompletó el Client Secret, borrarlo). El Inspector se registra solo.
-3. *Connect* abre la pantalla de login de SensorHub; se ingresa `MCP_AUTH_PASSWORD`.
+3. *Connect* abre el login de Keycloak; se ingresa con un usuario del realm.
 
-El contenedor del Inspector tiene que poder resolver el dominio. Si el servidor público está en la misma red local y el router no hace NAT *loopback*, el dominio no se alcanza desde adentro con la IP pública. En ese caso, `MCP_PUBLIC_HOST` y `MCP_PUBLIC_HOST_IP` de `.env` lo hacen apuntar a la IP local del servidor dentro del contenedor (`extra_hosts`). El navegador necesita lo mismo en el `/etc/hosts` de la PC, porque la pantalla de login se abre ahí.
+El contenedor del Inspector tiene que poder resolver el dominio. Si el servidor público está en la misma red local y el router no hace NAT *loopback*, el dominio no se alcanza desde adentro con la IP pública. En ese caso, `MCP_PUBLIC_HOST`, `AUTH_PUBLIC_HOST` y `MCP_PUBLIC_HOST_IP` de `.env` hacen apuntar los dominios del MCP y de Keycloak a la IP local del servidor dentro del contenedor (`extra_hosts`). El navegador necesita lo mismo en el `/etc/hosts` de la PC, porque el login se abre ahí.
 
 > La autenticación de la UI viene deshabilitada (`DANGEROUSLY_OMIT_AUTH`) a propósito, para no tener que copiar un token cada vez en desarrollo local. **No exponer este puerto con ngrok ni publicarlo en otra interfaz** sin volver a habilitar la autenticación — a diferencia del servidor MCP solo, el Inspector es una UI pensada para invocar tools con un click, así que sin token cualquiera que llegue al puerto puede operar los dispositivos.
 
@@ -201,6 +223,6 @@ Eso da una URL pública (`https://<algo>.ngrok-free.app`). Del lado del cliente 
 
 El servidor valida los encabezados `Host` y `Origin` (protección contra *DNS rebinding*), así que antes hay que agregar ese dominio en `.env`: `MCP_ALLOWED_HOSTS=...,<algo>.ngrok-free.app` y `MCP_ALLOWED_ORIGINS=...,https://<algo>.ngrok-free.app`. Si no, el servidor responde 421 o 403.
 
-Con autenticación activa, también hay que poner `MCP_PUBLIC_URL=https://<algo>.ngrok-free.app`, porque el login y los metadatos de OAuth se publican con esa URL. Como ngrok cambia el dominio en cada ejecución, los conectores quedan atados a esa URL: al cambiarla hay que volver a agregarlos.
+Con autenticación activa, también hay que poner `MCP_PUBLIC_URL=https://<algo>.ngrok-free.app`, porque los metadatos y la audiencia de los tokens se arman con esa URL, y actualizar la audiencia en Keycloak (mapper `audiencia-mcp` del client scope `sensorhub-mcp`; ver [`keycloak/configurar-keycloak.md`](keycloak/configurar-keycloak.md)). Keycloak necesita su propio dominio público (`AUTH_PUBLIC_URL`), por ejemplo un segundo túnel. Como ngrok cambia el dominio en cada ejecución, los conectores quedan atados a esa URL: al cambiarla hay que volver a agregarlos.
 
 **Antes de hacerlo:** no exponer el servidor con `MCP_AUTH_ENABLED=false`. Sin autenticación, cualquiera con la URL puede invocar las tools (incluida `set_switch_state`) mientras el túnel esté activo.

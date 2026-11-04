@@ -17,6 +17,7 @@ Este cliente corre en modo kernel (con `NET_ADMIN` y `/dev/net/tun`) porque ngin
 # dominio               máquina
 mcp.ejemplo.com         leno
 mqtt.ejemplo.com        leno
+auth.ejemplo.com        leno
 mcp2.ejemplo.com        pc-2
 mqtt2.ejemplo.com       pc-2
 ```

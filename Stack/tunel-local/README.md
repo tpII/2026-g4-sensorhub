@@ -43,7 +43,7 @@ flowchart LR
 
 - **El TLS se termina en esta PC**, no en el servidor público: el servidor público nunca ve el tráfico descifrado ni tiene los certificados. Solo lee el SNI del `ClientHello` para decidir a qué PC reenviarlo; cualquier otro dominio se corta ahí.
 - **Tailscale** arma el túnel (WireGuard por debajo) y asigna solo las IPs (`100.x.y.z`) y los nombres. nginx encuentra cada PC por su nombre en la tailnet (`leno.<tailnet>.ts.net`), así que no hay IPs que administrar.
-- **Traefik** atiende los dos dominios en el mismo puerto: el router HTTP de `MCP_DOMAIN` descifra y reenvía a `sensorhub_mcp:8000` (solo bajo `/mcp`), y el router TCP de `MQTT_DOMAIN` descifra y le entrega MQTT plano a `sensorhub_emqx:1883`. Se eligió Traefik porque trae de fábrica el ruteo TCP por SNI, la terminación TLS y la emisión de certificados.
+- **Traefik** atiende los tres dominios en el mismo puerto: el router HTTP de `MCP_DOMAIN` descifra y reenvía a `sensorhub_mcp:8000` (solo `/mcp` y sus metadatos de OAuth), el de `AUTH_DOMAIN` a Keycloak, `sensorhub_keycloak:8080` (solo el realm del MCP, sin la consola de administración; ver [`../../MCP/README.md`](../../MCP/README.md#autenticación-oauth-21)), y el router TCP de `MQTT_DOMAIN` descifra y le entrega MQTT plano a `sensorhub_emqx:1883`. Se eligió Traefik porque trae de fábrica el ruteo TCP por SNI, la terminación TLS y la emisión de certificados.
 - **Certificados** por TLS-ALPN-01: Let's Encrypt valida conectándose al mismo `443` con el SNI del dominio, nginx lo reenvía como cualquier conexión y Traefik responde el desafío. No hace falta abrir el 80.
 - **IP real del cliente**: nginx la manda con PROXY protocol y Traefik solo la acepta si la conexión viene de `127.0.0.1` (desde donde la entrega Tailscale), así que aparece en los logs de Traefik.
 
@@ -92,7 +92,7 @@ Con el stack ya levantado (la red `sensorhub_network` tiene que existir):
 
 ```bash
 cd Stack/tunel-local
-cp .env.example .env    # completar dominios, TS_AUTHKEY, TS_HOSTNAME y ACME_EMAIL
+cp .env.example .env    # completar dominios (MCP, MQTT y AUTH), TS_AUTHKEY, TS_HOSTNAME y ACME_EMAIL
 docker compose up -d
 docker compose logs -f
 ```
@@ -111,7 +111,8 @@ y recrear el contenedor del MCP (`docker compose up -d` en `MCP/`).
 ```bash
 docker exec sensorhub_ts_local tailscale status   # aparecen leno y toshi
 docker compose ps                                 # tailscale (healthy)
-curl -I https://mcp.ejemplo.com/mcp               # responde el MCP (405/406 es normal sin cuerpo)
+curl -i https://mcp.ejemplo.com/mcp               # responde el MCP (401 sin token)
+curl https://auth.ejemplo.com/realms/sensorhub/.well-known/openid-configuration   # responde Keycloak
 openssl s_client -connect mqtt.ejemplo.com:443 -servername mqtt.ejemplo.com </dev/null | head
 ```
 

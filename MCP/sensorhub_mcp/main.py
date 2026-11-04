@@ -8,10 +8,10 @@ from .config import (
     INFLUXDB_ORG,
     INFLUXDB_URL,
     MCP_AUTH_ENABLED,
+    MCP_AUTH_ISSUER,
     MCP_HOST,
     MCP_HTTP_PATH,
     MCP_PORT,
-    MCP_PUBLIC_URL,
     MCP_STATELESS_HTTP,
     MQTT_BROKER_HOST,
     MQTT_BROKER_PORT,
@@ -31,7 +31,7 @@ def main() -> None:
     logger.info("InfluxDB: %s (org %s, bucket %s)", INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET)
     logger.info("Endpoint: http://%s:%s%s", MCP_HOST, MCP_PORT, MCP_HTTP_PATH)
     if MCP_AUTH_ENABLED:
-        logger.info("Autenticación: OAuth 2.1 de un solo usuario (issuer %s)", MCP_PUBLIC_URL)
+        logger.info("Autenticación: OAuth 2.1 con Keycloak (issuer %s)", MCP_AUTH_ISSUER)
 
     mcp.run(transport="streamable-http", **HTTP_TRANSPORT_OPTIONS)
 

@@ -26,11 +26,12 @@ services:
       - MCP_STATELESS_HTTP=${MCP_STATELESS_HTTP:-false}
       - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*,sensorhub_mcp:*}
       - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
-      # Autenticación OAuth 2.1 de un solo usuario (ver .env.example)
+      # Autenticación OAuth 2.1 con Keycloak (ver .env.example). Las claves
+      # públicas se bajan por la red interna, sin pasar por el dominio público.
       - MCP_AUTH_ENABLED=${MCP_AUTH_ENABLED:-true}
       - MCP_PUBLIC_URL=${MCP_PUBLIC_URL:-}
-      - MCP_AUTH_PASSWORD=${MCP_AUTH_PASSWORD:-}
-      - MCP_AUTH_SECRET=${MCP_AUTH_SECRET:-}
+      - MCP_AUTH_ISSUER=${AUTH_PUBLIC_URL:-}/realms/${KC_REALM:-sensorhub}
+      - MCP_AUTH_JWKS_URL=http://sensorhub_keycloak:8080/realms/${KC_REALM:-sensorhub}/protocol/openid-connect/certs
     networks:
       - sensorhub_network
 
@@ -57,10 +58,76 @@ services:
       - sensorhub_network
     extra_hosts:
       - "${MCP_PUBLIC_HOST:-mcp.localhost}:${MCP_PUBLIC_HOST_IP:-127.0.0.1}"
+      - "${AUTH_PUBLIC_HOST:-auth.localhost}:${MCP_PUBLIC_HOST_IP:-127.0.0.1}"
+
+  # ----------------------------------------------------------------------------
+  # Keycloak: servidor de autorización OAuth del MCP (registro de clientes,
+  # login y emisión de tokens). Se publica en AUTH_PUBLIC_URL a través de
+  # Traefik (Stack/tunel-local); la consola de administración, solo en esta
+  # máquina: http://localhost:${KC_ADMIN_PORT}. El realm se configura a mano,
+  # una sola vez: ver keycloak/configurar-keycloak.md.
+  # ----------------------------------------------------------------------------
+  keycloak-db:
+    image: ${KEYCLOAK_DB_IMAGE:-postgres:17.6-alpine}
+    container_name: sensorhub_keycloak_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=${KC_DB_PASSWORD:-}
+    volumes:
+      # Clientes registrados, sesiones y claves de firma: sin esto, cada
+      # recreación obligaría a volver a agregar los conectores
+      - keycloak_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "keycloak", "-d", "keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sensorhub_network
+
+  keycloak:
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.8.1}
+    container_name: sensorhub_keycloak
+    restart: unless-stopped
+    command: start
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${KC_ADMIN_PORT:-8081}:8080"
+    environment:
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://sensorhub_keycloak_db:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=${KC_DB_PASSWORD:-}
+      # URL pública (la de los tokens y el login) y URL de la consola de
+      # administración, que no se publica en internet
+      - KC_HOSTNAME=${AUTH_PUBLIC_URL:-}
+      - KC_HOSTNAME_ADMIN=http://localhost:${KC_ADMIN_PORT:-8081}
+      # TLS lo termina Traefik: acá HTTP, con la URL original en X-Forwarded-*
+      - KC_HTTP_ENABLED=true
+      - KC_PROXY_HEADERS=xforwarded
+      - KC_HEALTH_ENABLED=true
+      # Administrador inicial: se crea solo con la base vacía (primer arranque)
+      - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_ADMIN_USERNAME:-admin}
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD:-}
+    healthcheck:
+      # La imagen no trae curl: se consulta /health/ready (puerto de gestión) con bash
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - sensorhub_network
 
 
 volumes:
   mcp_inspector_data:
+  keycloak_db:
+    name: sensorhub_keycloak_db
 
 networks:
   sensorhub_network:
