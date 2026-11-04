@@ -14,6 +14,28 @@ Guía para dejar Keycloak listo, a mano desde la consola de administración, par
 | Clients | **No** | Cada cliente crea el suyo al registrarse. No hay que crear ninguno a mano |
 | Roles o grupos | **No** | El servidor MCP no lee roles. Como el realm es solo del MCP, tener usuario habilitado ya equivale a tener acceso (ver [Agregar otro usuario](#6-agregar-otro-usuario)) |
 
+## Camino rápido: el realm se importa solo
+
+Keycloak arranca con `--import-realm` y lee [`realm-sensorhub.json`](realm-sensorhub.json). La primera vez, con la base vacía, crea el realm `sensorhub` con todo lo de los pasos 1 a 4 ya configurado. Toma `AUTH_PUBLIC_URL` y la audiencia (`MCP_PUBLIC_URL` + `MCP_HTTP_PATH`) del `.env`. Si el realm ya existe, no lo toca, y lo que se cambie desde la consola se conserva.
+
+1. Completar `MCP/.env` (ver el paso 0) y `docker compose up -d`. En el log aparece `Realm 'sensorhub' imported`:
+
+   ```bash
+   docker compose logs keycloak | grep -i import
+   ```
+
+2. Crear los usuarios desde la consola ([paso 5](#5-crear-el-usuario)). El JSON no trae usuarios, para no guardar contraseñas en el repositorio.
+
+Los pasos 1 a 4 sirven para entender qué hay en el realm o para armarlo a mano.
+
+**Ojo con los cambios de URL:** el JSON solo se aplica al crear el realm. Si después cambian `AUTH_PUBLIC_URL` o `MCP_PUBLIC_URL`, el realm queda con los valores viejos. Hay que actualizarlos desde la consola (*Frontend URL* del paso 1 y la audiencia del paso 2) o borrar el volumen para que se vuelva a importar.
+
+**Para regenerar el JSON** después de cambiar algo desde la consola: *Realm settings → Action → Partial export*, con grupos, roles y clientes. Después hay que:
+
+- volver a poner `${AUTH_PUBLIC_URL}` en `attributes.frontendUrl` y `${MCP_RESOURCE_URL}` en `included.custom.audience`;
+- borrar los clientes que se registraron solos;
+- revisar que no queden secretos.
+
 ## 0. Antes de empezar
 
 1. En `MCP/.env` tienen que estar `AUTH_PUBLIC_URL`, `MCP_PUBLIC_URL`, `KC_REALM` (por defecto `sensorhub`), `KC_ADMIN_USERNAME`, `KC_ADMIN_PASSWORD` y `KC_DB_PASSWORD`.

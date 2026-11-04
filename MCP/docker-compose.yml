@@ -64,8 +64,9 @@ services:
   # Keycloak: servidor de autorización OAuth del MCP (registro de clientes,
   # login y emisión de tokens). Se publica en AUTH_PUBLIC_URL a través de
   # Traefik (Stack/tunel-local); la consola de administración, solo en esta
-  # máquina: http://localhost:${KC_ADMIN_PORT}. El realm se configura a mano,
-  # una sola vez: ver keycloak/configurar-keycloak.md.
+  # máquina: http://localhost:${KC_ADMIN_PORT}. El realm del MCP se importa
+  # de keycloak/realm-sensorhub.json la primera vez (ver
+  # keycloak/configurar-keycloak.md); los usuarios se crean a mano.
   # ----------------------------------------------------------------------------
   keycloak-db:
     image: ${KEYCLOAK_DB_IMAGE:-postgres:17.6-alpine}
@@ -91,7 +92,9 @@ services:
     image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.8.1}
     container_name: sensorhub_keycloak
     restart: unless-stopped
-    command: start
+    # --import-realm: crea el realm de data/import si todavía no existe. Si ya
+    # existe no lo toca, así que los cambios hechos desde la consola se conservan
+    command: start --import-realm
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -119,6 +122,12 @@ services:
       # Administrador inicial: se crea solo con la base vacía (primer arranque)
       - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_ADMIN_USERNAME:-admin}
       - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD:-}
+      # Variables que usa realm-sensorhub.json al importarse: la Frontend URL
+      # del realm (emisor de los tokens) y la audiencia del endpoint MCP
+      - AUTH_PUBLIC_URL=${AUTH_PUBLIC_URL:-}
+      - MCP_RESOURCE_URL=${MCP_PUBLIC_URL:-}${MCP_HTTP_PATH:-/mcp}
+    volumes:
+      - ./keycloak/realm-sensorhub.json:/opt/keycloak/data/import/realm-sensorhub.json:ro
     healthcheck:
       # La imagen no trae curl: se consulta /health/ready (puerto de gestión) con bash
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q '\"UP\"' <&3"]

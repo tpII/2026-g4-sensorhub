@@ -11,7 +11,8 @@ MCP/
 ├── devices.csv             # Registro manual de dispositivos (device_type, device_id, nombre amigable)
 ├── docker-compose.yml      # Levanta el servidor, Keycloak y, opcionalmente, el MCP Inspector
 ├── keycloak/
-│   └── configurar-keycloak.md # Cómo configurar a mano el realm de Keycloak (usuarios, audiencia, registro de clientes, PKCE)
+│   ├── realm-sensorhub.json   # Realm del MCP, que Keycloak importa la primera vez que arranca
+│   └── configurar-keycloak.md # Qué configura el realm y por qué, y cómo crear usuarios
 ├── Dockerfile
 ├── requirements.txt
 └── sensorhub_mcp/          # El paquete Python del servidor
@@ -104,7 +105,7 @@ En `.env`:
 
 Además, el dominio de `MCP_PUBLIC_URL` tiene que estar en `MCP_ALLOWED_HOSTS` (p. ej. `mcp.ejemplo.com`) y en `MCP_ALLOWED_ORIGINS` (`https://mcp.ejemplo.com`). El dominio de Keycloak necesita su línea en `sv-publico/rutas.conf` y `AUTH_DOMAIN` en `Stack/tunel-local/.env`; el DNS y el certificado los cubre el comodín de `CERT_DOMAIN`.
 
-El realm se configura a mano desde la consola de administración, una sola vez (queda en la base de Keycloak): ver [`keycloak/configurar-keycloak.md`](keycloak/configurar-keycloak.md). En resumen:
+Keycloak importa el realm de [`keycloak/realm-sensorhub.json`](keycloak/realm-sensorhub.json) la primera vez que arranca (si ya existe, no lo toca); los usuarios se crean a mano desde la consola. Ver [`keycloak/configurar-keycloak.md`](keycloak/configurar-keycloak.md). En resumen:
 
 - **Realm** `KC_REALM`, sin registro de usuarios ni recuperación de contraseña, con protección contra fuerza bruta.
 - **Audiencia:** un client scope por defecto, `sensorhub-mcp`, que pone `aud = MCP_PUBLIC_URL + MCP_HTTP_PATH` en los tokens de todos los clientes.
