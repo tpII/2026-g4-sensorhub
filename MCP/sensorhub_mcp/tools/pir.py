@@ -12,7 +12,6 @@ from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ..influx_client import (
-    query_latest_telemetry,
     query_latest_true_event,
     query_state_series,
     summarize_binary_state_range,
@@ -34,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 # Un sensor PIR es puramente orientado a eventos: en un ambiente sin tránsito
 # puede pasar días sin emitir un mensaje sin que eso implique una falla.
-PIR_STATE_LOOKBACK_HOURS = 24 * 7
 PIR_LAST_EVENT_LOOKBACK_HOURS = 24 * 30
 
 
@@ -88,54 +86,14 @@ def _activation_timestamps(
     return times
 
 
-@mcp.tool(annotations=read_only("Estado actual de movimiento de un sensor PIR"))
-async def get_last_motion_state(device_id: DeviceIdParam, ctx: Context) -> str:
-    """
-    Obtiene el último estado reportado por un sensor PIR (si hay movimiento
-    activo en este momento o si la zona está en reposo) junto con la hora de
-    ese registro. Usar para preguntas sobre el presente ('¿hay alguien en la
-    cocina ahora?', '¿hay movimiento?'). Para saber cuándo fue la última vez
-    que se detectó movimiento aunque ahora esté en reposo, usar
-    get_last_motion_event. Si el usuario nombró el sensor por un lugar o un
-    apodo, llamar primero a resolve_device_id con device_type='pir'; si dio su
-    device_id, usarlo directamente.
-    """
-    device_id = await _pir(device_id)
-
-    try:
-        motion_val, time_str = await run_blocking(
-            query_latest_telemetry,
-            influx(ctx),
-            "pir_telemetry",
-            "motion",
-            device_id,
-            PIR_STATE_LOOKBACK_HOURS,
-        )
-    except Exception as e:
-        logger.error("Error consultando InfluxDB para PIR '%s': %s", device_id, e)
-        raise ToolError(INFLUX_UNAVAILABLE) from e
-
-    if motion_val is True:
-        return (
-            f"El sensor PIR '{device_id}' reporta movimiento activo "
-            f"(último estado: movimiento detectado a las {time_str})."
-        )
-    if motion_val is False:
-        return (
-            f"El sensor PIR '{device_id}' no reporta movimiento actualmente "
-            f"(último estado: reposo desde las {time_str})."
-        )
-    return f"No se encontraron registros en los últimos 7 días para el sensor PIR '{device_id}'."
-
-
 @mcp.tool(annotations=read_only("Última detección de movimiento de un sensor PIR"))
 async def get_last_motion_event(device_id: DeviceIdParam, ctx: Context) -> str:
     """
     Obtiene la fecha y hora de la última vez que un sensor PIR detectó
     movimiento efectivamente (motion=true), ignorando los eventos posteriores de
     vuelta al reposo (motion=false). Usar para preguntas como '¿cuándo fue la
-    última vez que hubo movimiento en la cocina?'. Para consultar si hay
-    movimiento activo ahora mismo, usar get_last_motion_state. Si el usuario
+    última vez que hubo movimiento en la cocina?'. Para consultar si hubo
+    movimiento en una ventana de tiempo, usar had_motion_in_range. Si el usuario
     nombró el sensor por un lugar o un apodo, llamar primero a resolve_device_id
     con device_type='pir'; si dio su device_id, usarlo directamente.
     """
@@ -252,4 +210,3 @@ async def count_motion_events(
         f"Entre {rango}, se registraron {summary.activations} eventos de movimiento en el sensor "
         f"PIR '{device_id}' (primero a las {first_str}, último a las {last_str})."
     )
-
