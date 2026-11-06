@@ -95,49 +95,7 @@ En todos los casos se usa la URL pública completa, `https://<dominio>/mcp`, y e
 
 ## Cómo probarlo
 
-### 1. Con un cliente MCP mínimo en Python
-
-Las tools son funciones asíncronas que reciben el contexto del servidor (cliente de InfluxDB compartido, sesión del cliente), así que se prueban a través del protocolo, con el cliente oficial del SDK, versión 2 (`pip install "mcp>=2.3,<3"`). El cliente tiene que enviar el token en el encabezado `Authorization` (ver el ejemplo; hay que exportar `MCP_AUTH_TOKEN`). Con el servidor levantado:
-
-```python
-import asyncio
-import os
-
-import httpx2
-from mcp.client.client import Client
-from mcp.client.streamable_http import streamable_http_client
-
-# La URL depende de desde dónde corre el cliente (ver la tabla de abajo).
-MCP_URL = os.getenv("MCP_URL", "http://localhost:8000/mcp")
-# El token es el MCP_AUTH_TOKEN del .env del servidor.
-TOKEN = os.environ["MCP_AUTH_TOKEN"]
-
-
-async def main():
-    http = httpx2.AsyncClient(headers={"Authorization": f"Bearer {TOKEN}"})
-    async with Client(streamable_http_client(MCP_URL, http_client=http)) as client:
-        print([tool.name for tool in (await client.list_tools()).tools])
-        result = await client.call_tool("resolve_device_id", {"description": "living"})
-        device_id = result.content[0].text
-        result = await client.call_tool("get_current_climate", {"device_id": device_id})
-        print(result.content[0].text)
-
-
-asyncio.run(main())
-```
-
-La URL del servidor depende de dónde corre. El ejemplo toma el valor de la variable de entorno `MCP_URL` y, si no existe, usa `http://localhost:8000/mcp`:
-
-| Servidor | URL |
-|:---|:---|
-| Local, en la misma PC donde corre Docker | `http://localhost:8000/mcp` (por defecto) |
-| Público, con un dominio | `https://<dominio>/mcp`, por ejemplo `MCP_URL=https://mcp.ejemplo.com/mcp python ejemplo.py`. El dominio hay que agregarlo a `MCP_ALLOWED_HOSTS` y `MCP_ALLOWED_ORIGINS` en `.env`, o el servidor responde 421 o 403 (ver «Probar desde internet») |
-
-Si se cambia `MCP_PORT` en `.env`, el puerto de la URL local tiene que coincidir.
-
-Los errores (dispositivo no registrado, fecha inválida, InfluxDB caído) llegan con `result.is_error == True` (en el protocolo, `isError`). `Client` negocia la revisión más nueva del protocolo (2026-07-28); los clientes de revisiones anteriores también son atendidos.
-
-### 2. Con el MCP Inspector (recomendado para probar las tools como las vería un LLM, sin necesitar un modelo)
+### 1. Con el MCP Inspector (recomendado para probar las tools como las vería un LLM, sin necesitar un modelo)
 
 **Opción A — ya viene como servicio en `docker-compose.yml`:**
 
