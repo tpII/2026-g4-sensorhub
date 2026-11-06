@@ -24,7 +24,7 @@ Keycloak arranca con `--import-realm` y lee [`realm-sensorhub.json`](realm-senso
    docker compose logs keycloak | grep -i import
    ```
 
-2. Crear los usuarios desde la consola ([paso 5](#5-crear-el-usuario)). El JSON no trae usuarios, para no guardar contraseñas en el repositorio.
+2. Crear los usuarios desde la consola ([paso 5](#5-crear-el-usuario)). El JSON trae un único usuario de demostración, `demo`, para poder probar de inmediato. Como el archivo está en el repositorio, su contraseña es pública: hay que cambiarla o borrar el usuario (*Users → demo*) antes de exponer el servicio.
 
 Los pasos 1 a 4 sirven para entender qué hay en el realm o para armarlo a mano.
 

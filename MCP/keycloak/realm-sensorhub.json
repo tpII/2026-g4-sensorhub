@@ -366,6 +366,20 @@
       } ]
     }
   },
+  "users" : [ {
+    "username" : "demo",
+    "enabled" : true,
+    "emailVerified" : true,
+    "email" : "demo@sensorhub.local",
+    "firstName" : "Demo",
+    "lastName" : "User",
+    "credentials" : [ {
+      "type" : "password",
+      "value" : "demo123",
+      "temporary" : false
+    } ],
+    "realmRoles" : [ "default-roles-sensorhub" ]
+  } ],
   "groups" : [ ],
   "defaultRole" : {
     "id" : "919e0e18-0f8d-4019-902f-4b3cacce6891",
