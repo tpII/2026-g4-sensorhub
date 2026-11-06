@@ -43,8 +43,8 @@ flowchart LR
 
 - **El TLS se termina en esta PC**, no en el servidor público: el servidor público nunca ve el tráfico descifrado ni tiene los certificados. Solo lee el SNI del `ClientHello` para decidir a qué PC reenviarlo; cualquier otro dominio se corta ahí.
 - **Tailscale** arma el túnel (WireGuard por debajo) y asigna solo las IPs (`100.x.y.z`) y los nombres. nginx encuentra cada PC por su nombre en la tailnet (`leno.<tailnet>.ts.net`), así que no hay IPs que administrar.
-- **Traefik** atiende los tres dominios en el mismo puerto: el router HTTP de `MCP_DOMAIN` descifra y reenvía a `sensorhub_mcp:8000` (solo `/mcp` y sus metadatos de OAuth), el de `AUTH_DOMAIN` a Keycloak, `sensorhub_keycloak:8080` (solo el realm del MCP, sin la consola de administración; ver [`../../MCP/README.md`](../../MCP/README.md#autenticación-oauth-21)), y el router TCP de `MQTT_DOMAIN` descifra y le entrega MQTT plano a `sensorhub_emqx:1883`. Se eligió Traefik porque trae de fábrica el ruteo TCP por SNI, la terminación TLS y la emisión de certificados.
-- **Certificado comodín** (`*.CERT_DOMAIN`) por desafío DNS-01: Traefik crea un registro TXT `_acme-challenge` en Cloudflare con la API, Let's Encrypt lo consulta y Traefik lo borra. Let's Encrypt no se conecta a ningún puerto, así que el certificado se obtiene y se renueva **aunque el servidor público no esté expuesto**: solo hace falta que Traefik tenga salida a internet. Un único certificado cubre los tres dominios (y cualquier otro subdominio directo que se agregue después).
+- **Traefik** atiende los dos dominios en el mismo puerto: el router HTTP de `MCP_DOMAIN` descifra y reenvía a `sensorhub_mcp:8000` (solo `/mcp`), y el router TCP de `MQTT_DOMAIN` descifra y le entrega MQTT plano a `sensorhub_emqx:1883`. Se eligió Traefik porque trae de fábrica el ruteo TCP por SNI, la terminación TLS y la emisión de certificados.
+- **Certificado comodín** (`*.CERT_DOMAIN`) por desafío DNS-01: Traefik crea un registro TXT `_acme-challenge` en Cloudflare con la API, Let's Encrypt lo consulta y Traefik lo borra. Let's Encrypt no se conecta a ningún puerto, así que el certificado se obtiene y se renueva **aunque el servidor público no esté expuesto**: solo hace falta que Traefik tenga salida a internet. Un único certificado cubre los dominios (y cualquier otro subdominio directo que se agregue después).
 - **IP real del cliente**: nginx la manda con PROXY protocol y Traefik solo la acepta si la conexión viene de `127.0.0.1` (desde donde la entrega Tailscale), así que aparece en los logs de Traefik.
 
 ### Quién puede llegar a qué
@@ -89,7 +89,7 @@ El token va en `CF_DNS_API_TOKEN` de `.env`. Solo puede tocar los registros DNS 
 |---|---|---|---|
 | `*.sensorhub` (es decir, `*.CERT_DOMAIN`) | A | IP pública | DNS only |
 
-Cubre `mcp`, `mqtt`, `auth` y cualquier dominio nuevo, así que no hay que crear un registro por servicio. Si hay registros puntuales viejos (`mcp.sensorhub`, ...) tienen prioridad sobre el comodín: borrarlos o dejarlos con la misma IP. Este registro **no hace falta para el certificado**: se puede crear recién al exponer el servidor público.
+Cubre `mcp`, `mqtt` y cualquier dominio nuevo, así que no hay que crear un registro por servicio. Si hay registros puntuales viejos (`mcp.sensorhub`, ...) tienen prioridad sobre el comodín: borrarlos o dejarlos con la misma IP. Este registro **no hace falta para el certificado**: se puede crear recién al exponer el servidor público.
 
 Con la nube naranja Cloudflare intenta terminar el TLS él mismo, y MQTT, que no es HTTP, se rompe.
 
@@ -105,7 +105,7 @@ Con el stack ya levantado (la red `sensorhub_network` tiene que existir):
 
 ```bash
 cd Stack/tunel-local
-cp .env.example .env    # completar dominios (MCP, MQTT, AUTH y CERT_DOMAIN), TS_AUTHKEY, TS_HOSTNAME, ACME_EMAIL y CF_DNS_API_TOKEN
+cp .env.example .env    # completar dominios (MCP, MQTT y CERT_DOMAIN), TS_AUTHKEY, TS_HOSTNAME, ACME_EMAIL y CF_DNS_API_TOKEN
 docker compose up -d
 docker compose logs -f
 ```
@@ -162,7 +162,6 @@ Las renovaciones también son por DNS: Traefik las hace solo 30 días antes del 
 docker exec sensorhub_ts_local tailscale status   # aparecen leno y toshi
 docker compose ps                                 # tailscale (healthy)
 curl -i https://mcp.ejemplo.com/mcp               # responde el MCP (401 sin token)
-curl https://auth.ejemplo.com/realms/sensorhub/.well-known/openid-configuration   # responde Keycloak
 openssl s_client -connect mqtt.ejemplo.com:443 -servername mqtt.ejemplo.com </dev/null | head
 ```
 
@@ -173,14 +172,14 @@ Esto ya necesita el servidor público y la tailnet arriba y el registro comodín
 Con el certificado ya emitido, se puede probar todo con los dominios reales y HTTPS sin exponer nada a internet, apuntando los dominios en el `/etc/hosts` de la PC. Cada nombre apunta a una sola IP, así que se elige un camino:
 
 ```text
-# A) Directo al Traefik de esta máquina (prueba Traefik, MCP, Keycloak y EMQX)
-127.0.0.1      mcp.sensorhub.wgr.com.ar auth.sensorhub.wgr.com.ar mqtt.sensorhub.wgr.com.ar
+# A) Directo al Traefik de esta máquina (prueba Traefik, MCP y EMQX)
+127.0.0.1      mcp.sensorhub.wgr.com.ar mqtt.sensorhub.wgr.com.ar
 # B) Por el servidor público en la red local (prueba además nginx y la tailnet)
-#192.168.0.33  mcp.sensorhub.wgr.com.ar auth.sensorhub.wgr.com.ar mqtt.sensorhub.wgr.com.ar
+#192.168.0.33  mcp.sensorhub.wgr.com.ar mqtt.sensorhub.wgr.com.ar
 ```
 
-- **A** usa el `443` publicado en `TRAEFIK_LOCAL_IP` y no necesita ni el servidor público ni la tailnet. Para el MCP Inspector en contenedor (que no ve el `/etc/hosts` de la PC), `TRAEFIK_LOCAL_IP=0.0.0.0` y, en `MCP/.env`, `MCP_PUBLIC_HOST_IP=host-gateway`.
-- **B** recorre el mismo camino que desde internet, con el router todavía cerrado. En `MCP/.env`, `MCP_PUBLIC_HOST_IP` con la IP local del servidor público.
+- **A** usa el `443` publicado en `TRAEFIK_LOCAL_IP` y no necesita ni el servidor público ni la tailnet.
+- **B** recorre el mismo camino que desde internet, con el router todavía cerrado.
 - Otros equipos de la red local (un celular, un ESP32) no tienen `/etc/hosts`: necesitan un DNS local (el del router, Pi-hole...) que resuelva los dominios a la IP de esta PC (con `TRAEFIK_LOCAL_IP=0.0.0.0`) o a la del servidor público.
 
 En los dos caminos Traefik ve como origen la puerta de enlace de Docker o el nginx, no la IP real del cliente, así que en sus logs todas las conexiones locales aparecen igual.
@@ -222,10 +221,10 @@ No hay IPs ni claves que copiar entre máquinas: Tailscale asigna la IP y nginx 
 
 ## Antes de exponerlo
 
-El MCP exige token de Keycloak y EMQX exige usuario y contraseña, así que la URL o el dominio solos no alcanzan. Lo que queda por tener en cuenta:
+El MCP exige un token fijo (`MCP_AUTH_TOKEN`) y EMQX exige usuario y contraseña, así que la URL o el dominio solos no alcanzan. Lo que queda por tener en cuenta:
 
 - **MQTT con un usuario compartido**: todos los dispositivos (ESP32 y simuladores) usan el mismo usuario, y la autorización deja pasar lo que no cubre la ACL (`no_match = allow` en [`../broker/templates/emqx.conf.template`](../broker/templates/emqx.conf.template)). Quien saque esa contraseña de un ESP32 puede publicar comandos a todos los switches. Si se compromete un dispositivo, hay que cambiarla en todos.
-- **Registro de clientes de Keycloak abierto**: cualquiera puede registrar un cliente (hasta el límite de la política, 200), aunque sin un usuario del realm no obtiene tokens. Ver [`../../MCP/keycloak/configurar-keycloak.md`](../../MCP/keycloak/configurar-keycloak.md#3-registro-dinámico-de-clientes-dcr) y revisar de vez en cuando los clientes registrados.
+- **Token del MCP compartido**: es un único secreto, sin usuarios ni vencimiento; quien lo tenga puede invocar todas las tools (incluida `set_switch_state`). Se guarda solo en el `.env` del MCP y en la configuración del conector; para rotarlo se cambia `MCP_AUTH_TOKEN` en `MCP/.env`, se recrea el contenedor y se actualiza el conector.
 - **`TRAEFIK_LOCAL_IP=0.0.0.0`** deja a Traefik alcanzable desde la red local en la que esté la PC, sin pasar por el servidor público: en una red que no es de confianza (un wifi público), volver a `127.0.0.1`.
 
 ## Notas

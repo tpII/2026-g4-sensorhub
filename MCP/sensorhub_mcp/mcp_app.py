@@ -11,7 +11,6 @@ from influxdb_client import InfluxDBClient
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
-from .auth import build_token_verifier, oauth_server_options
 from .config import (
     MCP_ALLOWED_HOSTS,
     MCP_ALLOWED_ORIGINS,
@@ -59,10 +58,7 @@ INSTRUCTIONS = (
     "El resource sensorhub://device-types describe los tipos de dispositivo disponibles."
 )
 
-# Autenticación OAuth con Keycloak (paquete auth/): con MCP_AUTH_ENABLED=false
-# el servidor queda abierto y no publica metadatos de OAuth.
-token_verifier = build_token_verifier()
-mcp = MCPServer(name="SensorHub", instructions=INSTRUCTIONS, lifespan=lifespan, **oauth_server_options(token_verifier))
+mcp = MCPServer(name="SensorHub", instructions=INSTRUCTIONS, lifespan=lifespan)
 
 # Opciones del transporte Streamable HTTP. En el SDK v2 no son parte del
 # constructor: se pasan a mcp.run() (ver main.py).

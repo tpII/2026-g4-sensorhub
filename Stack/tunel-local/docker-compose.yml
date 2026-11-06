@@ -29,7 +29,7 @@ services:
     networks:
       - sensorhub_network
 
-  # Terminación TLS: MCP y Keycloak (HTTPS → HTTP) y MQTTS (TLS → TCP 1883), por SNI.
+  # Terminación TLS: MCP (HTTPS → HTTP) y MQTTS (TLS → TCP 1883), por SNI.
   # Escucha en el 443 del namespace de Tailscale: recibe lo que llega por la
   # tailnet y lo que entra por el puerto publicado arriba.
   traefik:
@@ -70,11 +70,9 @@ services:
     environment:
       - MCP_DOMAIN=${MCP_DOMAIN:?Falta MCP_DOMAIN en .env}
       - MQTT_DOMAIN=${MQTT_DOMAIN:?Falta MQTT_DOMAIN en .env}
-      - AUTH_DOMAIN=${AUTH_DOMAIN:?Falta AUTH_DOMAIN en .env}
       - CERT_DOMAIN=${CERT_DOMAIN:?Falta CERT_DOMAIN en .env}
       # Token de la API de Cloudflare para el desafío DNS (ver README)
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:?Falta CF_DNS_API_TOKEN en .env}
-      - KC_REALM=${KC_REALM:-sensorhub}
       - MCP_HTTP_PATH=${MCP_HTTP_PATH:-/mcp}
     volumes:
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
