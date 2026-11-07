@@ -21,7 +21,7 @@ services:
       - MCP_HTTP_PATH=${MCP_HTTP_PATH:-/mcp}
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
-      # uvicorn toma la IP real de X-Forwarded-For (que pone Traefik) solo si
+      # uvicorn toma la IP real de X-Forwarded-For (que pone el proxy de Tailscale) solo si
       # el peer está en esta lista. Solo afecta a los logs de acceso.
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-*}
       # Modo stateless (escala horizontal; ver .env.example) y protección
