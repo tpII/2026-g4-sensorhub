@@ -20,6 +20,12 @@ services:
       - EMQX_NODE_NAME=emqx@127.0.0.1
       - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD__DEFAULT_USERNAME:-admin}
       - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD__DEFAULT_PASSWORD:-admin}
+      # Usuarios MQTT (ver broker/docker-entrypoint.sh): las contraseñas no tienen
+      # valor por defecto para no levantar nunca el broker con credenciales conocidas
+      - MQTT_ESP_USERNAME=${MQTT_ESP_USERNAME:-esp}
+      - MQTT_ESP_PASSWORD=${MQTT_ESP_PASSWORD:?Falta MQTT_ESP_PASSWORD en .env}
+      - MQTT_MCP_USERNAME=${MQTT_MCP_USERNAME:-mcp}
+      - MQTT_MCP_PASSWORD=${MQTT_MCP_PASSWORD:?Falta MQTT_MCP_PASSWORD en .env}
       - INFLUXDB_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN:-sensorhub_admin_secret_token_123}
       - INFLUXDB_ORG=${INFLUXDB_ORG:-sensorhub}
       - INFLUXDB_BUCKET=${INFLUXDB_BUCKET:-sensorhub}

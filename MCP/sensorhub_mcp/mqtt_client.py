@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 import paho.mqtt.client as mqtt
 
-from .config import MQTT_BROKER_HOST, MQTT_BROKER_PORT
+from .config import MQTT_BROKER_HOST, MQTT_BROKER_PORT, MQTT_PASSWORD, MQTT_USERNAME
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,9 @@ class MqttBrokerError(Exception):
 
 
 def get_mqtt_client(client_id: str = "mcp_client") -> mqtt.Client:
-    return mqtt.Client(client_id=client_id)
+    client = mqtt.Client(client_id=client_id)
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    return client
 
 
 # Función síncrona y bloqueante (espera hasta `timeout`): las tools la

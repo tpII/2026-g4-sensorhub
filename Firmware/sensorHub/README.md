@@ -11,18 +11,22 @@ Firmware modular desarrollado en **ESP-IDF v5.x** y **FreeRTOS** para la platafo
 El código está estructurado siguiendo el principio de responsabilidad única (SRP), manteniendo el punto de entrada (`main.c`) agnóstico de los sensores y actuadores físicos:
 
 ```text
-Firmwares/sensorHub/
+Firmware/sensorHub/
 ├── CMakeLists.txt                 # Definición del proyecto CMake
-├── sdkconfig.defaults             # Opciones de Kconfig fijadas por el proyecto (el sdkconfig se genera en el build)
+├── sdkconfig.defaults             # Opciones de Kconfig fijadas por el proyecto: particiones, CAs y Bluetooth (el sdkconfig se genera en el build)
 └── main/
     ├── idf_component.yml          # Dependencias oficiales (esp-idf-lib/dht)
     ├── CMakeLists.txt             # Registro de fuentes y carpetas de include
-    ├── app_config.h               # Configuración transversal del sistema (WiFi, MQTT, Dominios)
+    ├── app_config.h               # Configuración transversal del sistema (WiFi, MQTT, Dominios, LED, botón)
+    ├── secrets.h.example          # Plantilla de credenciales (contraseña MQTT)
+    ├── secrets.h                  # Credenciales reales (ignorado por Git, se crea desde el .example)
     ├── main.c                     # Orquestador del sistema
     ├── system_mgr.h / .c          # NVS, identidad de hardware (MAC) y generador de tópicos
     ├── wifi_mgr.h / .c            # Manejador de WiFi STA con auto-reconexión y eventos
+    ├── prov_mgr.h / .c            # Provisioning WiFi por BLE (wifi_provisioning + app de Espressif)
+    ├── button_mgr.h / .c          # Botón BOOT: mantener 5 s borra las credenciales WiFi
     ├── time_mgr.h / .c            # Sincronización horaria SNTP para el campo "ts" de los payloads
-    ├── led_mgr.h / .c             # LED de estado: parpadeo sin WiFi, 3 parpadeos al conectar, destello por mensaje MQTT
+    ├── led_mgr.h / .c             # LED de estado: modos INICIANDO, ESPERANDO_ACCION, EXITO y NORMAL
     ├── mqtt_mgr.h / .c            # Cliente MQTT universal (MQTT, MQTTS, WS, WSS, Pub/Sub)
     ├── sensor_service.h / .c      # Despachador que arranca la tarea según CONFIG_DEVICE_TYPE
     └── devices/                   # Módulos encapsulados por tipo de dispositivo
@@ -39,23 +43,36 @@ Firmwares/sensorHub/
 
 Este archivo contiene exclusivamente parámetros globales y de red, independientes del sensor o actuador utilizado.
 
+La contraseña MQTT (`CONFIG_MQTT_PASSWORD`) no va en `app_config.h` sino en `main/secrets.h`, que Git ignora y que `app_config.h` incluye. Antes de compilar por primera vez:
+
+```bash
+cp main/secrets.h.example main/secrets.h   # y completar la contraseña MQTT
+```
+
+Si falta, la compilación se detiene con un error que lo indica.
+
+Las credenciales WiFi no se compilan: se cargan en cada equipo por BLE con el provisioning (ver sección 6).
+
 | Parámetro | Valores Posibles | Descripción |
 | :--- | :--- | :--- |
-| **`CONFIG_WIFI_SSID`** | String (ej: `"MiWiFi"`) | Nombre de la red WiFi 2.4 GHz. |
-| **`CONFIG_WIFI_PASS`** | String | Contraseña de la red WiFi. |
-| **`CONFIG_WIFI_MAX_TX_POWER`** | `0` o `8`–`84` (unidades de 0,25 dBm) | Límite de potencia de transmisión WiFi. `0` = sin límite (default). En placas ESP32-C3 SuperMini clon que no logran conectar (log `Desconectado (reason=2)`, *AUTH_EXPIRE*), bajarla a `44` (11 dBm) o `34` (8,5 dBm) suele resolverlo, a costa de algo de alcance. |
-| **`CONFIG_SELECTED_PROTOCOL`** | `PROTOCOL_MQTT`<br>`PROTOCOL_MQTTS`<br>`PROTOCOL_WS`<br>`PROTOCOL_WSS` | Protocolo de transporte MQTT:<br>• `PROTOCOL_MQTT`: TCP plano (puerto 1883)<br>• `PROTOCOL_MQTTS`: TLS / SSL (puerto 8883)<br>• `PROTOCOL_WS`: WebSockets (puerto 8083)<br>• `PROTOCOL_WSS`: WebSockets Seguro (puerto 8084) |
+| **`CONFIG_WIFI_MAX_TX_POWER`** | `0` o `8`–`84` (unidades de 0,25 dBm) | Límite de potencia de transmisión WiFi. `0` = sin límite. El proyecto usa `60` (15 dBm). En placas ESP32-C3 SuperMini clon que no logran conectar (log `Desconectado (reason=2)`, *AUTH_EXPIRE*), bajarla a `44` (11 dBm) o `34` (8,5 dBm) suele resolverlo, a costa de algo de alcance. |
+| **`CONFIG_SELECTED_PROTOCOL`** | `PROTOCOL_MQTT`<br>`PROTOCOL_MQTTS`<br>`PROTOCOL_WS`<br>`PROTOCOL_WSS` | Protocolo de transporte MQTT:<br>• `PROTOCOL_MQTT`: TCP plano (puerto 1883)<br>• `PROTOCOL_MQTTS`: TLS / SSL (puerto 443, acceso público por el dominio; ver [Stack/tunel-local](../../Stack/tunel-local/README.md))<br>• `PROTOCOL_WS`: WebSockets (puerto 8083)<br>• `PROTOCOL_WSS`: WebSockets Seguro (puerto 8084) |
 | **`CONFIG_NTP_SERVER`** | String (default: `"pool.ntp.org"`) | Servidor SNTP para sincronizar la hora del campo `ts`. Si no responde, los payloads se envían sin `ts` hasta sincronizar. |
-| **`CONFIG_STATUS_LED_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | LED de estado, definido por chip:<br>• `GPIO_NUM_8` en ESP32-C3 SuperMini (LED azul integrado).<br>• `GPIO_NUM_2` en ESP32 DevKit (LED azul integrado).<br>• `GPIO_NUM_NC` (deshabilitado) en S2/S3/C6/H2, cuyas placas traen un LED RGB direccionable.<br>Sin WiFi parpadea 1 vez por segundo; al conectar hace 3 parpadeos en ~1 s; cada mensaje MQTT enviado o recibido produce un destello corto. En los nodos `switch` se deshabilita si coincide con `CONFIG_SWITCH_PIN`. |
+| **`CONFIG_STATUS_LED_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | LED de estado, definido por chip:<br>• `GPIO_NUM_8` en ESP32-C3 SuperMini (LED azul integrado).<br>• `GPIO_NUM_2` en ESP32 DevKit (LED azul integrado).<br>• `GPIO_NUM_NC` (deshabilitado) en S2/S3/C6/H2, cuyas placas traen un LED RGB direccionable.<br>Los patrones de cada modo están en la sección 6. En los nodos `switch` se deshabilita si coincide con `CONFIG_SWITCH_PIN`. |
 | **`CONFIG_STATUS_LED_ACTIVE_LEVEL`** | `1` o `0` | Nivel que enciende el LED de estado: `0` en el C3 SuperMini (*active-low*), `1` en el ESP32 DevKit. |
-| **`CONFIG_BROKER_HOST`** | String (ej: `"broker.emqx.io"`) | Host o IP del broker MQTT. |
+| **`CONFIG_PROV_BLE_NAME_PREFIX`** | String (default: `"PROV_"`) | Prefijo del nombre BLE en modo provisioning: `<prefijo><tipo>_<últimos 4 hex de la MAC>` (ej: `PROV_dht_9858`). La app de Espressif por defecto solo lista dispositivos que empiezan con `PROV_`. |
+| **`CONFIG_PROV_POP`** | String (default: `"sensorhub"`) | *Proof of Possession* que pide la app para abrir la sesión cifrada (Security 1). |
+| **`CONFIG_RESET_BUTTON_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | Botón que borra las credenciales WiFi. Es el botón BOOT de cada placa: `GPIO_NUM_9` en C3/C6/H2, `GPIO_NUM_0` en ESP32/S2/S3. |
+| **`CONFIG_RESET_BUTTON_ACTIVE_LEVEL`** | `0` o `1` | Nivel al presionar (`0`: BOOT conecta a GND). |
+| **`CONFIG_RESET_BUTTON_HOLD_MS`** | Milisegundos (default: `5000`) | Tiempo que hay que mantenerlo presionado. |
+| **`CONFIG_BROKER_HOST`** | String (ej: `"mqtt.sensorhub.wgr.com.ar"`) | Host del broker MQTT. Con MQTTS tiene que ser el dominio (no una IP), porque el certificado y el ruteo por SNI dependen del nombre. |
 | **`CONFIG_WS_PATH`** | String (ej: `"/mqtt"`) | Path para conexiones WebSockets. |
 | **`CONFIG_MQTT_TOPIC_PREFIX`** | String (default: `"sensorhub"`) | Espacio de nombres raíz para todos los tópicos. |
-| **`CONFIG_DEVICE_TYPE`** | `"dht"`, `"pir"`, `"switch"` | **Tipo de dispositivo a compilar**. Define qué driver y tarea se activan. |
-| **`CONFIG_MQTT_USERNAME`** | String | Usuario del broker MQTT (opcional). |
-| **`CONFIG_MQTT_PASSWORD`** | String | Contraseña del broker MQTT (opcional). |
+| **`CONFIG_DEVICE_TYPE`** | `"dht"`, `"pir"`, `"switch"` | **Tipo de dispositivo a compilar**. Define qué driver y tarea se activan. No tiene valor por defecto: se pasa desde el build (`-DDEVICE_TYPE=...` o la variable de entorno `DEVICE_TYPE`); si falta, la compilación se detiene con un error. |
+| **`CONFIG_MQTT_USERNAME`** | String (default: `"esp"`) | Usuario del broker MQTT, compartido por todos los dispositivos (`MQTT_ESP_USERNAME` de `Stack/.env`). |
+| **`CONFIG_MQTT_PASSWORD`** | String | Contraseña del usuario anterior (`MQTT_ESP_PASSWORD` de `Stack/.env`). Va en `secrets.h`. |
 
-NOTA sobre WS: El proyecto utiliza MQTT sobre TCP. El cliente esp-mqtt también soporta MQTT sobre WebSocket, por lo que se dejó la opción seleccionable aquí y el broker tiene habilitado el listener correspondiente. WS debería funcionar sin cambios adicionales, aunque no fue probado. WSS (al igual que MQTTS) requiere configurar en el firmware la CA del broker, ya que actualmente se valida contra el bundle de CAs públicas.
+NOTA sobre WS: El proyecto utiliza MQTT sobre TCP. El cliente esp-mqtt también soporta MQTT sobre WebSocket, por lo que se dejó la opción seleccionable aquí y el broker tiene habilitado el listener correspondiente. WS debería funcionar sin cambios adicionales, aunque no fue probado. Con MQTTS y WSS el certificado del broker se valida contra el bundle reducido de CAs públicas de ESP-IDF (`sdkconfig.defaults`), que incluye la raíz de Let's Encrypt.
 
 ---
 
@@ -92,8 +109,8 @@ Encapsula los parámetros del dispositivo de salida / conmutación.
 
 | Parámetro | Valores Posibles | Descripción |
 | :--- | :--- | :--- |
-| **`CONFIG_SWITCH_PIN`** | `GPIO_NUM_X` | Pin de salida conectado al switch o bobina del relé.<br>• `GPIO_NUM_8` para el LED integrado en el ESP32-C3 SuperMini.<br>• `GPIO_NUM_2` para el LED integrado en placas ESP32 DevKit. |
-| **`CONFIG_SWITCH_ACTIVE_LEVEL`** | `1` o `0` | Nivel lógico de encendido:<br>• `0` (Active-Low): Nivel 0V enciende el actuador (común en ESP32-C3 SuperMini GPIO 8 y módulos de relé optoacoplados).<br>• `1` (Active-High): Nivel 3.3V enciende el actuador (común en ESP32 DevKit GPIO 2). |
+| **`CONFIG_SWITCH_PIN`** | `GPIO_NUM_X` | Pin de salida conectado al switch o bobina del relé.<br>• `GPIO_NUM_13` en ESP32.<br>• `GPIO_NUM_8` en ESP32-C3 (LED integrado del SuperMini).<br>• `GPIO_NUM_2` en los demás chips. |
+| **`CONFIG_SWITCH_ACTIVE_LEVEL`** | `1` o `0` | Nivel lógico de encendido (default: `0` en todos los chips):<br>• `0` (Active-Low): Nivel 0V enciende el actuador (común en ESP32-C3 SuperMini GPIO 8 y módulos de relé optoacoplados).<br>• `1` (Active-High): Nivel 3.3V enciende el actuador (común en ESP32 DevKit GPIO 2). |
 | **`CONFIG_SWITCH_TELEMETRY_QOS`** | `0`, `1` o `2` (default: `1`) | QoS del feedback de estado en `telemetry`. |
 | **`CONFIG_SWITCH_TELEMETRY_RETAIN`** | `1` o `0` (default: `1`) | Retain del feedback: el último estado confirmado queda disponible para cualquier suscriptor. |
 | **`CONFIG_SWITCH_COMMAND_QOS`** | `0`, `1` o `2` (default: `1`) | QoS de la suscripción a `command`. Los comandos `on`/`off` son idempotentes, así que QoS 1 alcanza. |
@@ -133,9 +150,9 @@ Los tópicos se construyen automáticamente en tiempo de ejecución con la fórm
 
 ## 4. Compilación, Flasheo y Monitoreo (Docker Compose)
 
-Todas las herramientas de compilación y flasheo están contenidas en Docker mediante ESP-IDF oficial v5.5.6 en `Firmwares/utils/`.
+Todas las herramientas de compilación y flasheo están contenidas en Docker mediante ESP-IDF oficial v5.5.6 en `Firmware/utils/`.
 
-### Variables de entorno (`Firmwares/utils/.env`)
+### Variables de entorno (`Firmware/utils/.env`)
 
 ```ini
 TARGET=esp32c3          # esp32, esp32c3, esp32s3, etc.
@@ -159,6 +176,7 @@ DEVICE_TYPE=pir idf.py clean build
 `sdkconfig` y `dependencies.lock` se generan en cada build y están en `.gitignore`. Su formato depende de la versión de ESP-IDF, por lo que versionarlos rompe el build cuando alguien compila con otra versión (por ejemplo, un lock generado con ESP-IDF 5.3 no lo puede leer el 5.2.2 que se usaba antes en Docker).
 
 - **Configuración de Kconfig:** cualquier opción que el proyecto necesite distinta del default va en `sdkconfig.defaults`; `idf.py menuconfig` solo cambia el `sdkconfig` local y se pierde en el próximo build limpio. El target no va ahí: lo define `TARGET` (`idf.py set-target`).
+- **`sdkconfig.defaults` se aplica solo al generar el `sdkconfig`** (cuando no existe o al cambiar el target); `fullclean` no lo borra. Después de modificar `sdkconfig.defaults` hay que borrar `sdkconfig`. Por ejemplo, un `sdkconfig` anterior al provisioning BLE no tiene Bluetooth y el build se corta con `#error "El provisioning BLE requiere NimBLE..."`.
 - **Versiones de componentes:** se fijan con versión exacta en `main/idf_component.yml` (ej. `esp-idf-lib/dht: "1.2.0"`), para que el build sea reproducible sin lock.
 
 ---
@@ -184,8 +202,40 @@ Para añadir un nuevo sensor o actuador (por ejemplo, un sensor ultrasónico `"s
 3. **Registrar en `main/CMakeLists.txt`:**
    Agregar `devices/sonar_device.c` a la lista de `SRCS`.
 
-4. **Seleccionar el dispositivo en `main/app_config.h`:**
+4. **Compilar indicando el nuevo tipo:**
 
-   ```c
-   #define CONFIG_DEVICE_TYPE "sonar"
+   ```bash
+   idf.py -DDEVICE_TYPE=sonar build
    ```
+
+---
+
+## 6. Provisioning WiFi y LED de Estado
+
+Las credenciales WiFi se cargan por Bluetooth LE con la app **"ESP BLE Provisioning"** de Espressif (Play Store / App Store), usando el componente `wifi_provisioning` de ESP-IDF. Las guarda el driver WiFi en NVS.
+
+1. Si el equipo arranca **sin credenciales**, se anuncia por BLE como `PROV_<tipo>_<xxxx>` (LED en `ESPERANDO_ACCION`). El log serie muestra el nombre, la PoP y el payload para armar un QR.
+2. En la app: *Provision New Device* → *I don't have a QR code* (o escanear el QR), elegir el dispositivo e ingresar la PoP (`CONFIG_PROV_POP`). La app necesita Bluetooth y, en muchos Android, la ubicación activada. Al conectarse la app, el LED hace `EXITO` y queda apagado.
+3. La app lista las redes que escaneó el equipo; se elige una y se ingresa la contraseña. El equipo prueba la conexión (`INICIANDO`):
+   - Si falla, la app muestra el motivo (contraseña incorrecta o red no encontrada), el LED vuelve a `ESPERANDO_ACCION` y se puede reintentar sin reiniciar.
+   - Si conecta, el LED hace `EXITO` y el equipo se reinicia.
+4. Arranca conectándose con las credenciales guardadas (`INICIANDO`) y al obtener IP hace `EXITO` y pasa a `NORMAL`.
+
+Con credenciales guardadas el stack BLE no se inicia y su memoria se libera al arrancar.
+
+**Bluetooth en `sdkconfig.defaults`:** se activa NimBLE (más liviano que Bluedroid), como en el ejemplo oficial `wifi_prov_mgr` de ESP-IDF, y se recorta a lo que usa el provisioning siguiendo la guía *Minimizing Binary Size* de ESP-IDF: una conexión, sin los roles central y observer y con menos logs. Además, por decisión propia, se quitan el Security Manager (la sesión la cifra la capa de provisioning con Security 1 y la PoP) y las funciones de BLE 5. Si la app no lograra conectarse, lo primero a revertir es `CONFIG_BT_NIMBLE_SECURITY_ENABLE=n`. Qué hace cada opción y su referencia en la documentación: wiki, página 07, sección 4.3.
+
+**Reprovisionar:** mantener presionado el botón BOOT 5 s con el equipo andando. Mientras se mantiene, el LED está en `INICIANDO` (un parpadeo por segundo); al cumplirse el tiempo borra las credenciales, hace `EXITO` y se reinicia en modo provisioning. Soltarlo antes cancela. El botón funciona por interrupción, y mientras se mantiene presionado los reinicios por timeout del arranque (WiFi a 1 min, MQTT a 10 s) esperan: así no pisan el borrado. *No mantenerlo presionado al enchufar o resetear la placa: con BOOT presionado el chip entra en modo de descarga de firmware.*
+
+### Modos del LED (`main/led_mgr.h`)
+
+Los tiempos de cada modo se configuran en `led_mgr.h`: `CONFIG_LED_<MODO>_ON_MS` / `_OFF_MS` para `INICIANDO`, `ESPERANDO_ACCION` y `EXITO`, `CONFIG_LED_EXITO_PULSES` para la cantidad de pulsos de `EXITO` y `CONFIG_LED_NORMAL_ON_MS` para el destello por mensaje MQTT. El pin y el nivel activo siguen en `app_config.h` porque dependen de la placa.
+
+| Modo | Patrón (default) | Cuándo |
+| :--- | :--- | :--- |
+| `INICIANDO` | 500 ms encendido / 500 ms apagado | Conectando al WiFi; botón de reset presionado |
+| `ESPERANDO_ACCION` | 250 ms / 250 ms | Provisioning BLE sin la app conectada; credenciales rechazadas |
+| `EXITO` | 3 pulsos de 150 ms / 183 ms (~1 s), después `NORMAL` | WiFi conectado; la app se conectó por BLE; credenciales borradas |
+| `NORMAL` | Apagado, destello de 50 ms por mensaje MQTT | Funcionamiento normal |
+
+Cualquier módulo cambia el modo con `led_mgr_set_mode()`. El botón usa `led_mgr_set_override()` para forzar su patrón sin perder el modo de fondo, que vuelve al soltarlo.

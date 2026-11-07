@@ -9,6 +9,8 @@ import paho.mqtt.client as mqtt
 
 BROKER_HOST = os.getenv("BROKER_HOST", "sensorhub_emqx")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 TOPICO_COMANDOS = os.getenv("TOPICO_COMANDOS", "sensorhub/switch/switch_simulado/command")
 TOPICO_TELEMETRIA = os.getenv("TOPICO_TELEMETRIA", "sensorhub/switch/switch_simulado/telemetry")
 TOPICO_STATUS = os.getenv("TOPICO_STATUS", "sensorhub/switch/switch_simulado/status")
@@ -54,6 +56,8 @@ def on_message(client, userdata, msg):
 # CONEXION MQTT
 
 client = mqtt.Client()
+if MQTT_USERNAME:
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 client.on_connect = on_connect
 client.on_message = on_message
 client.will_set(TOPICO_STATUS, json.dumps({"online": False}), qos=1, retain=True)

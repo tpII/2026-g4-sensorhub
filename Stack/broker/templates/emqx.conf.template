@@ -76,6 +76,28 @@ listeners {
 }
 
 ## ------------------------------------------------------------------------------
+## Autenticación de Clientes MQTT (usuario y contraseña, en todos los listeners)
+## Dos usuarios fijos: uno compartido por todos los dispositivos (ESP32 y
+## simuladores) y otro para el servidor MCP. El entrypoint genera el archivo
+## a partir de MQTT_ESP_* y MQTT_MCP_* de .env y EMQX lo importa a su base
+## interna al arrancar. Un cliente sin usuario o con contraseña incorrecta es
+## rechazado.
+## ------------------------------------------------------------------------------
+authentication = [
+  {
+    mechanism = password_based
+    backend = built_in_database
+    user_id_type = username
+    password_hash_algorithm {
+      name = sha256
+      salt_position = suffix
+    }
+    bootstrap_file = "${EMQX_ETC_DIR}/auth-bootstrap.csv"
+    bootstrap_type = plain
+  }
+]
+
+## ------------------------------------------------------------------------------
 ## Autorización de Clientes MQTT (Acceso abierto por defecto en red local)
 ## ------------------------------------------------------------------------------
 authorization {

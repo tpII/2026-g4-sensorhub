@@ -1,0 +1,37 @@
+name: sensorhub_tunel_funnel
+# Alternativa a docker-compose.yml: Tailscale Funnel en lugar de sv-publico +
+# Traefik. Tailscale termina el TLS (certificado *.ts.net) y reenvía:
+#   https://<nodo>.<tailnet>.ts.net/mcp  -> sensorhub_mcp:8000/mcp
+#   <nodo>.<tailnet>.ts.net:10000 (MQTTS) -> sensorhub_emqx:1883
+# No levantar junto con docker-compose.yml (mismo nodo y mismo volumen de estado).
+services:
+  tailscale:
+    image: ${TAILSCALE_IMAGE:-tailscale/tailscale:v1.104.4}
+    container_name: sensorhub_ts_local
+    hostname: ${TS_HOSTNAME:-sensorhub}
+    restart: unless-stopped
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_HOSTNAME=${TS_HOSTNAME:-sensorhub}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=true
+      - TS_SERVE_CONFIG=/config/serve.json
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+      - ./funnel/serve.json:/config/serve.json:ro
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - sensorhub_network
+
+networks:
+  sensorhub_network:
+    name: sensorhub_network
+    external: true
+
+volumes:
+  tailscale_state:
+    name: sensorhub_ts_local_state

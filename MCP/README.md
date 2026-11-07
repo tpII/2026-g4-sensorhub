@@ -21,6 +21,7 @@ MCP/
     ├── devices.py            # Registro y resolución de device_id
     ├── timeutils.py          # Zona horaria y formato de fechas para Flux
     ├── main.py / __main__.py # Punto de entrada
+    ├── auth.py                # Autenticación con token fijo (middleware Bearer)
     └── tools/                 # Las tools expuestas al LLM (common.py: tipos y helpers compartidos)
 ```
 
@@ -68,46 +69,33 @@ Acá no hace falta tocar `.env` — `sensorhub_emqx` y `sensorhub_influxdb` se r
 
 En ambos casos, el servidor queda escuchando en `http://<MCP_HOST>:<MCP_PORT><MCP_HTTP_PATH>` — por defecto `http://localhost:8000/mcp`.
 
-## Cómo probarlo
+## Autenticación (token fijo)
 
-### 1. Con un cliente MCP mínimo en Python
+El servidor exige un token en cada pedido: `Authorization: Bearer <MCP_AUTH_TOKEN>`. Es un único secreto compartido, declarado en el `.env` del MCP; sin él (o con uno distinto) el servidor responde `401`. No arranca si `MCP_AUTH_TOKEN` está vacío. No hay OAuth, usuarios ni vencimiento: el código está en [`sensorhub_mcp/auth.py`](sensorhub_mcp/auth.py).
 
-Las tools son funciones asíncronas que reciben el contexto del servidor (cliente de InfluxDB compartido, sesión del cliente), así que se prueban a través del protocolo, con el cliente oficial del SDK, versión 2 (`pip install "mcp>=2.3,<3"`). Con el servidor levantado:
+Generar el token y ponerlo en `.env`:
 
-```python
-import asyncio
-import os
-
-from mcp.client.client import Client
-
-# La URL depende de desde dónde corre el cliente (ver la tabla de abajo).
-MCP_URL = os.getenv("MCP_URL", "http://localhost:8000/mcp")
-
-
-async def main():
-    async with Client(MCP_URL) as client:
-        print([tool.name for tool in (await client.list_tools()).tools])
-        result = await client.call_tool("resolve_device_id", {"description": "living"})
-        device_id = result.content[0].text
-        result = await client.call_tool("get_current_climate", {"device_id": device_id})
-        print(result.content[0].text)
-
-
-asyncio.run(main())
+```bash
+openssl rand -hex 32
 ```
 
-La URL del servidor depende de dónde corre. El ejemplo toma el valor de la variable de entorno `MCP_URL` y, si no existe, usa `http://localhost:8000/mcp`:
+```text
+MCP_AUTH_TOKEN=<el token generado>
+```
 
-| Servidor | URL |
-|:---|:---|
-| Local, en la misma PC donde corre Docker | `http://localhost:8000/mcp` (por defecto) |
-| Público, con un dominio | `https://<dominio>/mcp`, por ejemplo `MCP_URL=https://mcp.ejemplo.com/mcp python ejemplo.py`. El dominio hay que agregarlo a `MCP_ALLOWED_HOSTS` y `MCP_ALLOWED_ORIGINS` en `.env`, o el servidor responde 421 o 403 (ver «Probar desde internet») |
+Para rotarlo, se cambia en `.env`, se recrea el contenedor (`docker compose up -d mcp-server`) y se actualiza en cada cliente.
 
-Si se cambia `MCP_PORT` en `.env`, el puerto de la URL local tiene que coincidir.
+### Conectar un cliente
 
-Los errores (dispositivo no registrado, fecha inválida, InfluxDB caído) llegan con `result.is_error == True` (en el protocolo, `isError`). `Client` negocia la revisión más nueva del protocolo (2026-07-28); los clientes de revisiones anteriores también son atendidos.
+En todos los casos se usa la URL pública completa, `https://<dominio>/mcp`, y el token como encabezado fijo `Authorization: Bearer <token>`:
 
-### 2. Con el MCP Inspector (recomendado para probar las tools como las vería un LLM, sin necesitar un modelo)
+- **claude.ai** (y Claude Desktop o móvil): *Settings → Connectors → Add custom connector*, con la URL. El token se carga en *Request headers* (encabezados fijos que Claude envía en cada pedido; para servidores que se autentican con una API key o un bearer token en lugar de OAuth), con nombre `Authorization` y valor `Bearer <token>`. Ver [Get started with custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp).
+- **Claude Code**: `claude mcp add --transport http sensorhub https://<dominio>/mcp --header "Authorization: Bearer <token>"`.
+- **MCP Inspector**: ver más abajo, en «Cómo probarlo».
+
+## Cómo probarlo
+
+### 1. Con el MCP Inspector (recomendado para probar las tools como las vería un LLM, sin necesitar un modelo)
 
 **Opción A — ya viene como servicio en `docker-compose.yml`:**
 
@@ -116,7 +104,9 @@ cd MCP
 docker compose up -d mcp-inspector
 ```
 
-Abri `http://localhost:6274` en el navegador. Como corre en la misma red que `mcp-server`, para conectarlo hay que usar el nombre del contenedor, no `localhost`: **`http://sensorhub_mcp:8000/mcp`**.
+Se abre `http://localhost:6274` en el navegador. Como corre en la misma red que `mcp-server`, para conectarlo hay que usar el nombre del contenedor, no `localhost`: **`http://sensorhub_mcp:8000/mcp`**.
+
+En el Inspector, el token se carga en *Authentication → Custom Headers*: nombre `Authorization` y valor `Bearer <token>`.
 
 > La autenticación de la UI viene deshabilitada (`DANGEROUSLY_OMIT_AUTH`) a propósito, para no tener que copiar un token cada vez en desarrollo local. **No exponer este puerto con ngrok ni publicarlo en otra interfaz** sin volver a habilitar la autenticación — a diferencia del servidor MCP solo, el Inspector es una UI pensada para invocar tools con un click, así que sin token cualquiera que llegue al puerto puede operar los dispositivos.
 
@@ -132,7 +122,7 @@ En cualquiera de las dos opciones, una vez conectado se pueden listar e invocar 
 
 ### 3. Conectando un cliente real (Claude Desktop, Claude Code, etc.)
 
-Para probar con lenguaje natural de punta a punta, se agrega el servidor como un MCP remoto por URL en la configuración del cliente (`http://localhost:8000/mcp`). Desde ahí, las preguntas al LLM ya pasan por el flujo completo: el modelo elige qué tool llamar, con qué argumentos, y arma la respuesta final a partir de lo que la tool le devuelve.
+Para probar con lenguaje natural de punta a punta, se agrega el servidor como un MCP remoto por URL en la configuración del cliente: `http://localhost:8000/mcp` sin autenticación, o la URL pública con autenticación (ver «Conectar un cliente»). Desde ahí, las preguntas al LLM ya pasan por el flujo completo: el modelo elige qué tool llamar, con qué argumentos, y arma la respuesta final a partir de lo que la tool le devuelve.
 
 ## Probar desde internet (con modelos públicos o clientes externos)
 
@@ -146,4 +136,4 @@ Eso da una URL pública (`https://<algo>.ngrok-free.app`). Del lado del cliente 
 
 El servidor valida los encabezados `Host` y `Origin` (protección contra *DNS rebinding*), así que antes hay que agregar ese dominio en `.env`: `MCP_ALLOWED_HOSTS=...,<algo>.ngrok-free.app` y `MCP_ALLOWED_ORIGINS=...,https://<algo>.ngrok-free.app`. Si no, el servidor responde 421 o 403.
 
-**Antes de hacerlo:** las credenciales que usa el servidor (token de InfluxDB, etc.) son las de desarrollo documentadas en [`../Stack/README.md`](../Stack/README.md) — no son secretas, pero tampoco hay que dejar el túnel abierto más tiempo del que dura la prueba, porque cualquiera con la URL puede invocar las tools (incluida `set_switch_state`) mientras el túnel esté activo.
+**Antes de hacerlo:** cualquiera que tenga la URL y el token puede invocar las tools (incluida `set_switch_state`) mientras el túnel esté activo. No compartir el token y rotarlo después de la prueba.

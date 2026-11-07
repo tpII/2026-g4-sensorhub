@@ -21,13 +21,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
-        led_mgr_set_wifi_connected(false);
+        led_mgr_set_mode(LED_MODE_INICIANDO);
         wifi_event_sta_disconnected_t *ev = (wifi_event_sta_disconnected_t *)event_data;
         ESP_LOGW(TAG, "Desconectado (reason=%d). Reintentando conexion...", ev->reason);
         esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
-        led_mgr_set_wifi_connected(true);
+        led_mgr_set_mode(LED_MODE_EXITO);
         ESP_LOGI(TAG, "Conectado a WiFi y con IP asignada.");
     }
 }
@@ -42,27 +42,20 @@ esp_err_t wifi_mgr_init(void) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
+    return ESP_OK;
+}
+
+esp_err_t wifi_mgr_connect(void) {
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                     ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
                     IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL, NULL));
 
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = CONFIG_WIFI_SSID,
-            .password = CONFIG_WIFI_PASS,
-        },
-    };
-
+    // La configuracion STA (SSID y contraseña) la carga el driver desde NVS
+    led_mgr_set_mode(LED_MODE_INICIANDO);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
-#if CONFIG_WIFI_MAX_TX_POWER != 0
-    // Limite de potencia para placas que no autentican a potencia maxima (ver app_config.h).
-    // Debe llamarse despues de esp_wifi_start().
-    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(CONFIG_WIFI_MAX_TX_POWER));
-    ESP_LOGI(TAG, "Potencia de TX limitada a %.2f dBm", CONFIG_WIFI_MAX_TX_POWER * 0.25);
-#endif
+    wifi_mgr_apply_tx_power();
 
     return ESP_OK;
 }
@@ -81,3 +74,22 @@ esp_err_t wifi_mgr_wait_connected(TickType_t timeout_ticks) {
     return (bits & WIFI_CONNECTED_BIT) ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
+esp_err_t wifi_mgr_erase_credentials(void) {
+    // Restaura la configuracion WiFi de fabrica (incluye SSID y contraseña en NVS)
+    esp_err_t ret = esp_wifi_restore();
+    if (ret == ESP_OK) {
+        ESP_LOGW(TAG, "Credenciales WiFi borradas");
+    } else {
+        ESP_LOGE(TAG, "No se pudieron borrar las credenciales: %s", esp_err_to_name(ret));
+    }
+    return ret;
+}
+
+void wifi_mgr_apply_tx_power(void) {
+#if CONFIG_WIFI_MAX_TX_POWER != 0
+    // Limite de potencia para placas que no autentican a potencia maxima (ver app_config.h).
+    // Debe llamarse despues de esp_wifi_start().
+    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(CONFIG_WIFI_MAX_TX_POWER));
+    ESP_LOGI(TAG, "Potencia de TX limitada a %.2f dBm", CONFIG_WIFI_MAX_TX_POWER * 0.25);
+#endif
+}

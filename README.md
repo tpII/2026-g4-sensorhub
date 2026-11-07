@@ -23,7 +23,7 @@
 
 > **Requisito:** tener [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y corriendo.
 
-Cloná el repositorio y ejecutá el script desde la raíz del proyecto:
+Se clona el repositorio y se ejecuta el script desde la raíz del proyecto:
 
 **Windows (PowerShell):**
 ```powershell

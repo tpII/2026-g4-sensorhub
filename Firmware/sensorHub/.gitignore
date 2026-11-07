@@ -5,3 +5,5 @@ build
 # y las versiones de componentes en main/idf_component.yml
 **/sdkconfig
 **/dependencies.lock
+# Credenciales locales (WiFi y MQTT): se versiona main/secrets.h.example
+main/secrets.h

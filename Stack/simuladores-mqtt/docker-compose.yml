@@ -7,6 +7,8 @@ services:
     environment:
       - BROKER_HOST=sensorhub_emqx
       - MQTT_PORT=1883
+      - MQTT_USERNAME=${MQTT_ESP_USERNAME:-esp}
+      - MQTT_PASSWORD=${MQTT_ESP_PASSWORD:?Falta MQTT_ESP_PASSWORD en .env}
       - TOPICO_TELEMETRIA=sensorhub/dht/dht_simulado/telemetry
       - INTERVALO_SEGUNDOS=5
     networks:
@@ -20,6 +22,8 @@ services:
     environment:
       - BROKER_HOST=sensorhub_emqx
       - MQTT_PORT=1883
+      - MQTT_USERNAME=${MQTT_ESP_USERNAME:-esp}
+      - MQTT_PASSWORD=${MQTT_ESP_PASSWORD:?Falta MQTT_ESP_PASSWORD en .env}
       - TOPICO_TELEMETRIA=sensorhub/pir/pir_simulado/telemetry
       - INTERVALO_MIN_SEGUNDOS=2
       - INTERVALO_MAX_SEGUNDOS=8
@@ -34,6 +38,8 @@ services:
     environment:
       - BROKER_HOST=sensorhub_emqx
       - MQTT_PORT=1883
+      - MQTT_USERNAME=${MQTT_ESP_USERNAME:-esp}
+      - MQTT_PASSWORD=${MQTT_ESP_PASSWORD:?Falta MQTT_ESP_PASSWORD en .env}
       - TOPICO_COMANDOS=sensorhub/switch/switch_simulado/command
       - TOPICO_TELEMETRIA=sensorhub/switch/switch_simulado/telemetry
     networks:
@@ -47,6 +53,8 @@ services:
     environment:
       - BROKER_HOST=sensorhub_emqx
       - MQTT_PORT=1883
+      - MQTT_USERNAME=${MQTT_MCP_USERNAME:-mcp}
+      - MQTT_PASSWORD=${MQTT_MCP_PASSWORD:?Falta MQTT_MCP_PASSWORD en .env}
       - TOPICO_COMANDOS=sensorhub/switch/switch_simulado/command
       - INTERVALO_SEGUNDOS=4
     networks:

@@ -9,6 +9,8 @@ import paho.mqtt.client as mqtt
 
 BROKER_HOST = os.getenv("BROKER_HOST", "sensorhub_emqx")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 TOPICO_COMANDOS = os.getenv("TOPICO_COMANDOS", "sensorhub/switch/switch_simulado/command")
 INTERVALO_SEGUNDOS = int(os.getenv("INTERVALO_SEGUNDOS", "4"))
 
@@ -21,6 +23,8 @@ print(f"Intervalo de conmutacion: cada {INTERVALO_SEGUNDOS}s")
 # CONEXION MQTT
 
 client = mqtt.Client()
+if MQTT_USERNAME:
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
 conectado = False
 while not conectado:

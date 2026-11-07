@@ -1,0 +1,23 @@
+// ==============================================================================
+// SensorHub - Política de acceso de la tailnet
+// Pegar en el panel de Tailscale → Access controls (reemplaza la política por
+// defecto, que deja a todos los dispositivos hablar con todos).
+// ==============================================================================
+{
+	// Quién puede crear auth keys con cada tag
+	"tagOwners": {
+		"tag:sv-publico": ["autogroup:admin"],
+		"tag:servicios":  ["autogroup:admin"],
+	},
+
+	"grants": [
+		// El servidor público solo llega al 443 (Traefik) de cada PC con servicios.
+		// Nada más está permitido: las PCs no se ven entre sí ni pueden llegar
+		// al servidor público.
+		{
+			"src": ["tag:sv-publico"],
+			"dst": ["tag:servicios"],
+			"ip":  ["tcp:443"],
+		},
+	],
+}

@@ -9,6 +9,9 @@ load_dotenv()
 # Conexion al broker MQTT
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "sensorhub_emqx")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+# Usuario MQTT del MCP (MQTT_MCP_USERNAME / MQTT_MCP_PASSWORD de Stack/.env)
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "mcp")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 
 # Conexion a InfluxDB
 INFLUXDB_URL = os.getenv("INFLUXDB_URL", "http://sensorhub_influxdb:8086")
@@ -39,3 +42,7 @@ def _csv_list(value: str) -> list[str]:
 # su dominio a ambas listas.
 MCP_ALLOWED_HOSTS = _csv_list(os.getenv("MCP_ALLOWED_HOSTS", "localhost:*,127.0.0.1:*,sensorhub_mcp:*"))
 MCP_ALLOWED_ORIGINS = _csv_list(os.getenv("MCP_ALLOWED_ORIGINS", "http://localhost:*,http://127.0.0.1:*"))
+
+# Token fijo que tienen que enviar los clientes como "Authorization: Bearer <token>"
+# (ver auth.py). Obligatorio: el servidor no arranca sin él.
+MCP_AUTH_TOKEN = os.getenv("MCP_AUTH_TOKEN", "").strip()

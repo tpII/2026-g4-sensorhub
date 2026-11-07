@@ -10,6 +10,8 @@ import paho.mqtt.client as mqtt
 # En Docker se conecta por el nombre del contenedor en la red de docker
 BROKER_HOST = os.getenv("BROKER_HOST", "sensorhub_emqx")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 USE_TLS = os.getenv("USE_TLS", "false").lower() in ("true", "1", "yes") or MQTT_PORT in (443, 8883)
 TOPICO_TELEMETRIA = os.getenv("TOPICO_TELEMETRIA", "sensorhub/dht/dht_simulado/telemetry")
 TOPICO_STATUS = os.getenv("TOPICO_STATUS", "sensorhub/dht/dht_simulado/status")
@@ -22,6 +24,8 @@ print(f"Publicando en tópico: {TOPICO_TELEMETRIA}")
 # CONEXIÓN MQTT
 
 client = mqtt.Client()
+if MQTT_USERNAME:
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 if USE_TLS:
     client.tls_set()
 

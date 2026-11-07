@@ -12,6 +12,8 @@ services:
     environment:
       - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-sensorhub_emqx}
       - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+      - MQTT_USERNAME=${MQTT_USERNAME:-mcp}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:?Falta MQTT_PASSWORD en .env (MQTT_MCP_PASSWORD de Stack/.env)}
       - INFLUXDB_URL=${INFLUXDB_URL:-http://sensorhub_influxdb:8086}
       - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-sensorhub_admin_secret_token_123}
       - INFLUXDB_ORG=${INFLUXDB_ORG:-sensorhub}
@@ -19,11 +21,16 @@ services:
       - MCP_HTTP_PATH=${MCP_HTTP_PATH:-/mcp}
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
+      # uvicorn toma la IP real de X-Forwarded-For (que pone Traefik) solo si
+      # el peer está en esta lista. Solo afecta a los logs de acceso.
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-*}
       # Modo stateless (escala horizontal; ver .env.example) y protección
       # contra DNS rebinding: hosts y orígenes aceptados (ver .env.example).
       - MCP_STATELESS_HTTP=${MCP_STATELESS_HTTP:-false}
       - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-localhost:*,127.0.0.1:*,sensorhub_mcp:*}
       - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
+      # Token fijo que tienen que enviar los clientes (ver .env.example)
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:?Falta MCP_AUTH_TOKEN en .env (generar uno con openssl rand -hex 32)}
     networks:
       - sensorhub_network
 

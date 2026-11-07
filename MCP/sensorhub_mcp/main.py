@@ -2,7 +2,10 @@
 
 import logging
 
+import uvicorn
+
 from . import resources, tools  # noqa: F401  (registran resources y tools al importarse)
+from .auth import BearerTokenMiddleware, check_auth_config
 from .config import (
     INFLUXDB_BUCKET,
     INFLUXDB_ORG,
@@ -28,8 +31,15 @@ def main() -> None:
     logger.info("Broker MQTT: %s:%s", MQTT_BROKER_HOST, MQTT_BROKER_PORT)
     logger.info("InfluxDB: %s (org %s, bucket %s)", INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET)
     logger.info("Endpoint: http://%s:%s%s", MCP_HOST, MCP_PORT, MCP_HTTP_PATH)
+    logger.info("Autenticación: token fijo (Authorization: Bearer)")
 
-    mcp.run(transport="streamable-http", **HTTP_TRANSPORT_OPTIONS)
+    check_auth_config()
+    # Se arma la app ASGI a mano (en vez de mcp.run) para envolverla con el
+    # middleware que exige el token.
+    options = {k: v for k, v in HTTP_TRANSPORT_OPTIONS.items() if k != "port"}
+    app = mcp.streamable_http_app(**options)
+    app.add_middleware(BearerTokenMiddleware)
+    uvicorn.run(app, host=MCP_HOST, port=MCP_PORT, log_level=mcp.settings.log_level.lower())
 
 
 if __name__ == "__main__":
