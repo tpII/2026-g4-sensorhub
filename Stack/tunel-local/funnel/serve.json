@@ -1,0 +1,17 @@
+{
+  "TCP": {
+    "443":   { "HTTPS": true },
+    "10000": { "TerminateTLS": "${TS_CERT_DOMAIN}", "TCPForward": "sensorhub_emqx:1883" }
+  },
+  "Web": {
+    "${TS_CERT_DOMAIN}:443": {
+      "Handlers": {
+        "/mcp": { "Proxy": "http://sensorhub_mcp:8000/mcp" }
+      }
+    }
+  },
+  "AllowFunnel": {
+    "${TS_CERT_DOMAIN}:443": true,
+    "${TS_CERT_DOMAIN}:10000": true
+  }
+}

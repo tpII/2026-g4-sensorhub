@@ -58,13 +58,13 @@
 // Dominio público del broker (registro A en Cloudflare). Con MQTTS tiene que ser
 // el dominio y no una IP: el certificado y el ruteo por SNI dependen del nombre.
 // Para conectarse directo al broker en la LAN (MQTT sin TLS), usar su IP local.
-#define CONFIG_BROKER_HOST              "mqtt.sensorhub.wgr.com.ar"
+#define CONFIG_BROKER_HOST              "sensorhub.tailf54415.ts.net"
 #define CONFIG_WS_PATH                  "/mqtt"
 
 #if (CONFIG_SELECTED_PROTOCOL == PROTOCOL_MQTT)
     #define CONFIG_BROKER_URI           "mqtt://" CONFIG_BROKER_HOST ":1883"
 #elif (CONFIG_SELECTED_PROTOCOL == PROTOCOL_MQTTS)
-    #define CONFIG_BROKER_URI           "mqtts://" CONFIG_BROKER_HOST ":443"
+    #define CONFIG_BROKER_URI           "mqtts://" CONFIG_BROKER_HOST ":10000"
 #elif (CONFIG_SELECTED_PROTOCOL == PROTOCOL_WS)
     #define CONFIG_BROKER_URI           "ws://" CONFIG_BROKER_HOST ":8083" CONFIG_WS_PATH
 #elif (CONFIG_SELECTED_PROTOCOL == PROTOCOL_WSS)

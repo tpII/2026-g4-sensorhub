@@ -15,8 +15,8 @@ Este cliente corre en modo kernel (con `NET_ADMIN` y `/dev/net/tun`) porque ngin
 
 ```text
 # dominio               máquina
-mcp.ejemplo.com         leno
-mqtt.ejemplo.com        leno
+mcp.ejemplo.com         sensorhub
+mqtt.ejemplo.com        sensorhub
 mcp2.ejemplo.com        pc-2
 mqtt2.ejemplo.com       pc-2
 ```
@@ -62,8 +62,8 @@ Copiar `rutas.conf` **antes** del primer `up`: si no existe, Docker crea una car
 ## Verificar
 
 ```bash
-docker exec sensorhub_ts_publico tailscale status          # toshi y cada PC con servicios (leno, ...)
-docker exec sensorhub_ts_publico tailscale ping leno       # "via <ip>:<puerto>" = directo, "via DERP" = relay
+docker exec sensorhub_ts_publico tailscale status          # toshi y cada PC con servicios (sensorhub, ...)
+docker exec sensorhub_ts_publico tailscale ping sensorhub       # "via <ip>:<puerto>" = directo, "via DERP" = relay
 docker compose logs nginx                                  # rutas cargadas al arrancar
 docker compose logs -f nginx                               # una línea por conexión: sni=... upstream=...
 ```

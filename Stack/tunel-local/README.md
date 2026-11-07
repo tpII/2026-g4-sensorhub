@@ -34,7 +34,7 @@ flowchart LR
 
     ESP -->|"TLS 443/tcp"| NGX
     LLM -->|"TLS 443/tcp"| NGX
-    NGX -->|"TLS + PROXY protocol<br/>a leno.tailnet:443"| TSS
+    NGX -->|"TLS + PROXY protocol<br/>a sensorhub.tailnet:443"| TSS
     TSS ===|"tailnet (WireGuard)"| TSC
     TSC -->|"127.0.0.1:443"| TRK
     TRK -->|"MQTT plano"| EMQX
@@ -42,7 +42,7 @@ flowchart LR
 ```
 
 - **El TLS se termina en esta PC**, no en el servidor público: el servidor público nunca ve el tráfico descifrado ni tiene los certificados. Solo lee el SNI del `ClientHello` para decidir a qué PC reenviarlo; cualquier otro dominio se corta ahí.
-- **Tailscale** arma el túnel (WireGuard por debajo) y asigna solo las IPs (`100.x.y.z`) y los nombres. nginx encuentra cada PC por su nombre en la tailnet (`leno.<tailnet>.ts.net`), así que no hay IPs que administrar.
+- **Tailscale** arma el túnel (WireGuard por debajo) y asigna solo las IPs (`100.x.y.z`) y los nombres. nginx encuentra cada PC por su nombre en la tailnet (`sensorhub.<tailnet>.ts.net`), así que no hay IPs que administrar.
 - **Traefik** atiende los dos dominios en el mismo puerto: el router HTTP de `MCP_DOMAIN` descifra y reenvía a `sensorhub_mcp:8000` (solo `/mcp`), y el router TCP de `MQTT_DOMAIN` descifra y le entrega MQTT plano a `sensorhub_emqx:1883`. Se eligió Traefik porque trae de fábrica el ruteo TCP por SNI, la terminación TLS y la emisión de certificados.
 - **Certificado comodín** (`*.CERT_DOMAIN`) por desafío DNS-01: Traefik crea un registro TXT `_acme-challenge` en Cloudflare con la API, Let's Encrypt lo consulta y Traefik lo borra. Let's Encrypt no se conecta a ningún puerto, así que el certificado se obtiene y se renueva **aunque el servidor público no esté expuesto**: solo hace falta que Traefik tenga salida a internet. Un único certificado cubre los dominios (y cualquier otro subdominio directo que se agregue después).
 - **IP real del cliente**: nginx la manda con PROXY protocol y Traefik solo la acepta si la conexión viene de `127.0.0.1` (desde donde la entrega Tailscale), así que aparece en los logs de Traefik.
@@ -159,7 +159,7 @@ Las renovaciones también son por DNS: Traefik las hace solo 30 días antes del 
 ### 6. Verificar de punta a punta
 
 ```bash
-docker exec sensorhub_ts_local tailscale status   # aparecen leno y toshi
+docker exec sensorhub_ts_local tailscale status   # aparecen sensorhub y toshi
 docker compose ps                                 # tailscale (healthy)
 curl -i https://mcp.ejemplo.com/mcp               # responde el MCP (401 sin token)
 openssl s_client -connect mqtt.ejemplo.com:443 -servername mqtt.ejemplo.com </dev/null | head
@@ -230,5 +230,5 @@ El MCP exige un token fijo (`MCP_AUTH_TOKEN`) y EMQX exige usuario y contraseña
 ## Notas
 
 - Si el contenedor `tailscale` se recrea, el namespace de red cambia y Traefik queda sin red: hay que recrearlo también (`docker compose up -d --force-recreate traefik`).
-- Si se borra el volumen `sensorhub_ts_local_state`, la PC aparece como una máquina nueva: hace falta una auth key nueva y borrar la vieja del panel (si no, la nueva queda como `leno-1` y nginx no la encuentra).
+- Si se borra el volumen `sensorhub_ts_local_state`, la PC aparece como una máquina nueva: hace falta una auth key nueva y borrar la vieja del panel (si no, la nueva queda como `sensorhub-1` y nginx no la encuentra).
 - Traefik tiene `readTimeout=0` en el entrypoint para no cortar conexiones MQTT de larga duración; las conexiones sin tráfico durante 1 h las corta nginx en el servidor público (el keepalive MQTT de los ESP lo evita).

@@ -6,7 +6,7 @@
 # ==============================================================================
 
 # dominio               máquina
-mcp.ejemplo.com         leno
-mqtt.ejemplo.com        leno
+mcp.ejemplo.com         sensorhub
+mqtt.ejemplo.com        sensorhub
 mcp2.ejemplo.com        pc-2
 mqtt2.ejemplo.com       pc-2
