@@ -11,7 +11,9 @@ BROKER_HOST = os.getenv("BROKER_HOST", "sensorhub_emqx")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
-TOPICO_COMANDOS = os.getenv("TOPICO_COMANDOS", "sensorhub/switch/switch_simulado/command")
+# device_id del switch al que manda comandos (12 caracteres hexadecimales en minúsculas)
+DEVICE_ID = os.getenv("DEVICE_ID", "cccccccccccc")
+TOPICO_COMANDOS = f"sensorhub/switch/{DEVICE_ID}/command"
 INTERVALO_SEGUNDOS = int(os.getenv("INTERVALO_SEGUNDOS", "4"))
 
 print(f"Iniciando emisor de comandos para Switch...")

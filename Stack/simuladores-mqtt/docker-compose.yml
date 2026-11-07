@@ -9,8 +9,8 @@ services:
       - MQTT_PORT=1883
       - MQTT_USERNAME=${MQTT_ESP_USERNAME:-esp}
       - MQTT_PASSWORD=${MQTT_ESP_PASSWORD:?Falta MQTT_ESP_PASSWORD en .env}
-      - TOPICO_TELEMETRIA=sensorhub/dht/dht_simulado/telemetry
-      - INTERVALO_SEGUNDOS=5
+      - DEVICE_ID=aaaaaaaaaaaa
+      - INTERVALO_SEGUNDOS=10
     networks:
       - sensorhub_network
 
@@ -24,7 +24,7 @@ services:
       - MQTT_PORT=1883
       - MQTT_USERNAME=${MQTT_ESP_USERNAME:-esp}
       - MQTT_PASSWORD=${MQTT_ESP_PASSWORD:?Falta MQTT_ESP_PASSWORD en .env}
-      - TOPICO_TELEMETRIA=sensorhub/pir/pir_simulado/telemetry
+      - DEVICE_ID=bbbbbbbbbbbb
       - INTERVALO_MIN_SEGUNDOS=2
       - INTERVALO_MAX_SEGUNDOS=8
     networks:
@@ -40,8 +40,7 @@ services:
       - MQTT_PORT=1883
       - MQTT_USERNAME=${MQTT_ESP_USERNAME:-esp}
       - MQTT_PASSWORD=${MQTT_ESP_PASSWORD:?Falta MQTT_ESP_PASSWORD en .env}
-      - TOPICO_COMANDOS=sensorhub/switch/switch_simulado/command
-      - TOPICO_TELEMETRIA=sensorhub/switch/switch_simulado/telemetry
+      - DEVICE_ID=cccccccccccc
     networks:
       - sensorhub_network
 
@@ -55,7 +54,7 @@ services:
       - MQTT_PORT=1883
       - MQTT_USERNAME=${MQTT_MCP_USERNAME:-mcp}
       - MQTT_PASSWORD=${MQTT_MCP_PASSWORD:?Falta MQTT_MCP_PASSWORD en .env}
-      - TOPICO_COMANDOS=sensorhub/switch/switch_simulado/command
+      - DEVICE_ID=cccccccccccc
       - INTERVALO_SEGUNDOS=4
     networks:
       - sensorhub_network
