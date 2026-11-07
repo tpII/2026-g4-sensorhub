@@ -29,9 +29,11 @@ MCP/
 
 | device_type | device_id | nombre amigable |
 |:---|:---|:---|
-| dht | dht_simulado | living |
-| pir | pir_simulado | cocina |
-| switch | switch_simulado | oficina |
+| dht | aaaaaaaaaaaa | living |
+| pir | bbbbbbbbbbbb | cocina |
+| switch | cccccccccccc | oficina |
+
+Los dispositivos simulados usan el mismo formato de `device_id` que el firmware (12 caracteres hexadecimales en minúsculas, la MAC sin separadores), con un mismo carácter repetido para distinguirlos de los reales. El servidor **solo acepta ese formato**: un `device_id` con otra forma (por ejemplo `dht_simulado`) se rechaza antes de consultar nada.
 
 ## Prerrequisitos
 

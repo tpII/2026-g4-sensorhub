@@ -40,7 +40,11 @@ _DEVICE_DESCRIPTION_STOPWORDS = {"el", "la", "los", "las", "de", "del", "un", "u
 # device_id siempre se interpola en una query Flux armada con f-strings —
 # validar contra un patrón fijo antes de usarlo evita que un valor con
 # comillas o sintaxis de Flux altere el filtro (ver wiki, 06, sección 1.3).
-_SAFE_DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+# El único formato válido es el del contrato (wiki, 03, sección 1): la MAC en
+# 12 caracteres hexadecimales en minúsculas y sin separadores. Se aplica sobre
+# la forma canónica (ver canonical_device_id); no hay excepciones para ids de
+# dispositivos simulados, que usan el mismo formato.
+_SAFE_DEVICE_ID_PATTERN = re.compile(r"^[0-9a-f]{12}$")
 
 
 def is_safe_device_id(device_id: str) -> bool:

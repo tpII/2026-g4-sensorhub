@@ -261,7 +261,7 @@ cd 2026-g4-sensorhub
 │   │   ├── mcp_app.py        # MCPServer: lifespan, instrucciones, transporte y seguridad HTTP
 │   │   ├── timeutils.py      # Conversión de timestamps ISO 8601 a Flux
 │   │   └── main.py           # Entrypoint del servidor
-│   ├── devices.csv           # Registro de mapeo (living -> dht_simulado, etc.)
+│   ├── devices.csv           # Registro de mapeo (living -> aaaaaaaaaaaa, etc.)
 │   ├── docker-compose.yml    # Despliegue de mcp-server y mcp-inspector
 │   ├── Dockerfile
 │   ├── requirements.txt

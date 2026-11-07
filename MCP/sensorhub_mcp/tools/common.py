@@ -25,20 +25,20 @@ INFLUX_UNAVAILABLE = "No se pudo consultar InfluxDB en este momento; reintentar 
 DeviceType = Literal["dht", "pir", "switch"]
 
 # device_id tal como puede escribirlo el usuario: MAC con o sin ':'/'-', en
-# cualquier combinación de mayúsculas, o un id simulado (dht_simulado). El
-# patrón deja afuera comillas y operadores antes de que el valor llegue al
-# código (la validación definitiva se hace sobre la forma canónica).
+# cualquier combinación de mayúsculas. El patrón deja afuera comillas y
+# operadores antes de que el valor llegue al código (la validación definitiva,
+# 12 caracteres hexadecimales, se hace sobre la forma canónica).
 DeviceIdParam = Annotated[
     str,
     Field(
         description=(
             "device_id del dispositivo: su dirección MAC, 12 caracteres hexadecimales con o sin ':' "
-            "(por ejemplo 983dae529858), o un id simulado como dht_simulado. Dado por el usuario o "
-            "devuelto por resolve_device_id. No acepta nombres de lugares."
+            "(por ejemplo 983dae529858). Dado por el usuario o devuelto por resolve_device_id. "
+            "No acepta nombres de lugares."
         ),
         min_length=1,
-        max_length=64,
-        pattern=r"^[A-Za-z0-9_:-]+$",
+        max_length=17,
+        pattern=r"^[0-9A-Fa-f:-]+$",
     ),
 ]
 
