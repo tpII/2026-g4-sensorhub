@@ -1,9 +1,10 @@
-name: sensorhub_tunel
+name: sensorhub_tunel_funnel
+# Alternativa a docker-compose.yml: Tailscale Funnel en lugar de sv-publico +
+# Traefik. Tailscale termina el TLS (certificado *.ts.net) y reenvía:
+#   https://<nodo>.<tailnet>.ts.net/mcp  -> sensorhub_mcp:8000/mcp
+#   <nodo>.<tailnet>.ts.net:10000 (MQTTS) -> sensorhub_emqx:1883
+# No levantar junto con docker-compose.yml (mismo nodo y mismo volumen de estado).
 services:
-  # Cliente Tailscale en modo userspace: sin NET_ADMIN ni /dev/net/tun, no
-  # toca la red del host. Las conexiones que llegan por la tailnet las entrega
-  # a 127.0.0.1 de este namespace, donde escucha Traefik. Qué puede llegar lo
-  # decide la política de la tailnet (sv-publico/tailscale-policy.hujson).
   tailscale:
     image: ${TAILSCALE_IMAGE:-tailscale/tailscale:v1.104.4}
     container_name: sensorhub_ts_local
@@ -14,69 +15,17 @@ services:
       - TS_HOSTNAME=${TS_HOSTNAME:-sensorhub}
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_USERSPACE=true
+      - TS_SERVE_CONFIG=/config/serve.json
     volumes:
-      # Identidad del nodo: sin esto, cada recreación sería una máquina nueva
       - tailscale_state:/var/lib/tailscale
+      - ./funnel/serve.json:/config/serve.json:ro
     healthcheck:
       test: ["CMD", "tailscale", "status"]
       interval: 30s
       timeout: 5s
       retries: 3
-    # El 443 de Traefik (que comparte este namespace) también en esta máquina,
-    # para probar sin pasar por el servidor público dejar descomentado ports:
-    ports:
-      - "0.0.0.0:443:443"
     networks:
       - sensorhub_network
-
-  # Terminación TLS: MCP (HTTPS → HTTP) y MQTTS (TLS → TCP 1883), por SNI.
-  # Escucha en el 443 del namespace de Tailscale: recibe lo que llega por la
-  # tailnet y lo que entra por el puerto publicado arriba.
-  traefik:
-    image: ${TRAEFIK_IMAGE:-traefik:v3.3.5}
-    container_name: sensorhub_traefik
-    restart: unless-stopped
-    network_mode: "service:tailscale"
-    depends_on:
-      - tailscale
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-    command:
-      - --log.level=INFO
-      - --accesslog=true
-      - --providers.file.filename=/etc/traefik/dynamic.yml
-      - --entrypoints.websecure.address=:443
-      # Tailscale (userspace) entrega las conexiones desde 127.0.0.1: solo ese
-      # origen puede declarar la IP real del cliente que manda nginx
-      - --entrypoints.websecure.proxyprotocol.trustedips=127.0.0.1/32
-      # Sin límite de lectura: las conexiones MQTT quedan abiertas indefinidamente
-      - --entrypoints.websecure.transport.respondingtimeouts.readtimeout=0
-      # Certificado comodín *.CERT_DOMAIN por DNS-01: Traefik crea un registro
-      # TXT en Cloudflare por API y Let's Encrypt lo consulta. Let's Encrypt no
-      # se conecta a ningún puerto, así que el servidor público no tiene que
-      # estar expuesto para obtenerlo ni para renovarlo
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?Falta ACME_EMAIL en .env}
-      - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
-      - --certificatesresolvers.letsencrypt.acme.caserver=${ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}
-      - --certificatesresolvers.letsencrypt.acme.dnschallenge=true
-      - --certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare
-      # Para comprobar que el TXT ya se propagó, consulta resolvers públicos
-      # (no el DNS interno de Docker)
-      - --certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53
-    environment:
-      - MCP_DOMAIN=${MCP_DOMAIN:?Falta MCP_DOMAIN en .env}
-      - MQTT_DOMAIN=${MQTT_DOMAIN:?Falta MQTT_DOMAIN en .env}
-      - CERT_DOMAIN=${CERT_DOMAIN:?Falta CERT_DOMAIN en .env}
-      # Token de la API de Cloudflare para el desafío DNS (ver README)
-      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:?Falta CF_DNS_API_TOKEN en .env}
-      - MCP_HTTP_PATH=${MCP_HTTP_PATH:-/mcp}
-    volumes:
-      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-      - traefik_acme:/data
 
 networks:
   sensorhub_network:
@@ -86,5 +35,3 @@ networks:
 volumes:
   tailscale_state:
     name: sensorhub_ts_local_state
-  traefik_acme:
-    name: sensorhub_traefik_acme
