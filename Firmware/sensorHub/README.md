@@ -65,7 +65,7 @@ Las credenciales WiFi no se compilan: se cargan en cada equipo por BLE con el pr
 | **`CONFIG_RESET_BUTTON_PIN`** | `GPIO_NUM_X` o `GPIO_NUM_NC` | Botón que borra las credenciales WiFi. Es el botón BOOT de cada placa: `GPIO_NUM_9` en C3/C6/H2, `GPIO_NUM_0` en ESP32/S2/S3. |
 | **`CONFIG_RESET_BUTTON_ACTIVE_LEVEL`** | `0` o `1` | Nivel al presionar (`0`: BOOT conecta a GND). |
 | **`CONFIG_RESET_BUTTON_HOLD_MS`** | Milisegundos (default: `5000`) | Tiempo que hay que mantenerlo presionado. |
-| **`CONFIG_BROKER_HOST`** | String (ej: `"mqtt.sensorhub.wgr.com.ar"`) | Host del broker MQTT. Con MQTTS tiene que ser el dominio (no una IP), porque el certificado y el ruteo por SNI dependen del nombre. |
+| **`CONFIG_BROKER_HOST`** | String (ej: `"sensorhub.tailf54415.ts.net"`) | Host del broker MQTT. Con MQTTS tiene que ser el hostname de Tailscale Funnel (no una IP), porque el certificado depende del nombre. |
 | **`CONFIG_WS_PATH`** | String (ej: `"/mqtt"`) | Path para conexiones WebSockets. |
 | **`CONFIG_MQTT_TOPIC_PREFIX`** | String (default: `"sensorhub"`) | Espacio de nombres raíz para todos los tópicos. |
 | **`CONFIG_DEVICE_TYPE`** | `"dht"`, `"pir"`, `"switch"` | **Tipo de dispositivo a compilar**. Define qué driver y tarea se activan. No tiene valor por defecto: se pasa desde el build (`-DDEVICE_TYPE=...` o la variable de entorno `DEVICE_TYPE`); si falta, la compilación se detiene con un error. |

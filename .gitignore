@@ -13,5 +13,3 @@
 *.log
 **/__pycache__
 
-# Tabla de rutas del servidor público (se versiona el .example)
-Stack/sv-publico/rutas.conf

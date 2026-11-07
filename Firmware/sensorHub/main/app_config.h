@@ -44,7 +44,7 @@
 
 // --- Selección de Protocolo MQTT ---
 #define PROTOCOL_MQTT                   0   // TCP: mqtt://host:1883
-#define PROTOCOL_MQTTS                  1   // SSL/TLS: mqtts://host:443 (acceso público: Traefik termina el TLS)
+#define PROTOCOL_MQTTS                  1   // SSL/TLS: mqtts://host:10000 (acceso público: Tailscale Funnel termina el TLS en el puerto 10000)
 #define PROTOCOL_WS                     2   // WebSocket: ws://host:8083/mqtt
 #define PROTOCOL_WSS                    3   // WebSocket Seguro: wss://host:8084/mqtt
 
@@ -55,8 +55,8 @@
 #define CONFIG_NTP_SERVER               "pool.ntp.org"
 
 // --- Broker MQTT & Endpoints ---
-// Dominio público del broker (registro A en Cloudflare). Con MQTTS tiene que ser
-// el dominio y no una IP: el certificado y el ruteo por SNI dependen del nombre.
+// Hostname público del broker (Tailscale Funnel: <nodo>.<tailnet>.ts.net). Con
+// MQTTS tiene que ser el nombre y no una IP: el certificado depende del nombre.
 // Para conectarse directo al broker en la LAN (MQTT sin TLS), usar su IP local.
 #define CONFIG_BROKER_HOST              "sensorhub.tailf54415.ts.net"
 #define CONFIG_WS_PATH                  "/mqtt"

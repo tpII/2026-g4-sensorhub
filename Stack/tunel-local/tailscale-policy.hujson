@@ -1,0 +1,19 @@
+// ==============================================================================
+// SensorHub - Política de acceso de la tailnet (Funnel)
+// Pegar en el panel de Tailscale → Access controls. Además hay que habilitar
+// HTTPS en el panel → DNS → HTTPS Certificates.
+// ==============================================================================
+{
+	// Quién puede crear auth keys con el tag de esta máquina
+	"tagOwners": {
+		"tag:servicios": ["autogroup:admin"],
+	},
+
+	// Permite a las PCs con tag:servicios exponer servicios a internet con Funnel
+	"nodeAttrs": [
+		{
+			"target": ["tag:servicios"],
+			"attr":   ["funnel"],
+		},
+	],
+}
