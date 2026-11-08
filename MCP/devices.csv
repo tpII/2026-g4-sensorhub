@@ -1,7 +1,17 @@
 device_type,device_id,friendly_name
 dht,aaaaaaaaaaaa,living
+dht,111111111111,living comedor
+dht,222222222222,cocina
+dht,333333333333,cocina auxiliar
 pir,bbbbbbbbbbbb,cocina
+pir,444444444444,pasillo
+pir,555555555555,pasillo norte
+pir,666666666666,pasillo
 switch,cccccccccccc,oficina
+switch,666666666666,oficina 1
+switch,777777777777,oficina 2
+switch,888888888888,luz del jardin
+switch,999999999999,luz del garage
 dht,983dae529858,demo
 pir,0892728138ec,demo
 switch,9454c5b096b0,demo
