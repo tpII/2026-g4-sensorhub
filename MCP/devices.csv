@@ -6,7 +6,7 @@ dht,333333333333,cocina auxiliar
 pir,bbbbbbbbbbbb,cocina
 pir,444444444444,pasillo
 pir,555555555555,pasillo norte
-pir,666666666666,pasillo
+switch,111177777777,pasillo
 switch,cccccccccccc,oficina
 switch,666666666666,oficina 1
 switch,777777777777,oficina 2

@@ -1,60 +1,25 @@
 #!/usr/bin/env python3
+import json
 import os
 import time
-import json
-import paho.mqtt.client as mqtt
 
+from comun import BROKER_HOST, MQTT_PORT, PREFIJO_TOPICOS, conectar, crear_cliente, dispositivos
 
-# VARIABLES Y CONFIGURACION
-
-BROKER_HOST = os.getenv("BROKER_HOST", "sensorhub_emqx")
-MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
-MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
-MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
-# device_id del switch al que manda comandos (12 caracteres hexadecimales en minúsculas)
-DEVICE_ID = os.getenv("DEVICE_ID", "cccccccccccc")
-TOPICO_COMANDOS = f"sensorhub/switch/{DEVICE_ID}/command"
 INTERVALO_SEGUNDOS = int(os.getenv("INTERVALO_SEGUNDOS", "4"))
 
-print(f"Iniciando emisor de comandos para Switch...")
-print(f"Conectando a {BROKER_HOST}:{MQTT_PORT}...")
-print(f"Publicando comandos en: {TOPICO_COMANDOS}")
-print(f"Intervalo de conmutacion: cada {INTERVALO_SEGUNDOS}s")
-
-
-# CONEXION MQTT
-
-client = mqtt.Client()
-if MQTT_USERNAME:
-    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
-
-conectado = False
-while not conectado:
-    try:
-        client.connect(BROKER_HOST, MQTT_PORT, 60)
-        conectado = True
-        print(f"Conectado exitosamente al broker MQTT!")
-    except Exception as e:
-        print(f"Esperando broker en {BROKER_HOST}:{MQTT_PORT} ({e})... reintentando en 3s")
-        time.sleep(3)
-
+ids = dispositivos("switch", "cccccccccccc")
+print(f"Emisor de comandos para {len(ids)} switches -> {BROKER_HOST}:{MQTT_PORT}; cada {INTERVALO_SEGUNDOS}s", flush=True)
+client = crear_cliente()
+conectar(client)
 client.loop_start()
 
-
-# LOOP: Alterna entre comando 'on' y 'off' periodicamente
-
-estado_actual = "off"
-
+# Alterna 'on' y 'off' en todos los switches.
+estado = "off"
 while True:
-    estado_actual = "on" if estado_actual == "off" else "off"
-
-    payload = json.dumps({
-        "state": estado_actual,
-        "ts": int(time.time() * 1000)
-    })
-
-    client.publish(TOPICO_COMANDOS, payload, qos=1)
-    print(f"[{TOPICO_COMANDOS}] -> {payload}", flush=True)
-
+    estado = "on" if estado == "off" else "off"
+    for did in ids:
+        topico = f"{PREFIJO_TOPICOS}/switch/{did}/command"
+        payload = json.dumps({"state": estado, "ts": int(time.time() * 1000)})
+        client.publish(topico, payload, qos=1)
+        print(f"[{topico}] -> {payload}", flush=True)
     time.sleep(INTERVALO_SEGUNDOS)
-

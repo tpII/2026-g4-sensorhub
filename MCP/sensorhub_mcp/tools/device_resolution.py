@@ -37,18 +37,9 @@ DeviceTypeParam = Annotated[
 
 
 def _options(registry: list[dict]) -> dict[str, str]:
-    """Opción visible para el usuario -> device_id. Si el nombre amigable se repite
-    (entre tipos o dentro del mismo tipo), se agregan el tipo y el device_id para que
-    cada opción sea distinguible y no se pisen entre sí."""
-    names = [r["friendly_name"] for r in registry]
-    return {
-        (
-            r["friendly_name"]
-            if names.count(r["friendly_name"]) == 1
-            else f"{r['friendly_name']} ({r['device_type']}, {r['device_id']})"
-        ): r["device_id"]
-        for r in registry
-    }
+    """Opción visible para el usuario -> device_id. Todas llevan nombre, tipo y
+    device_id, para que sean comparables entre sí y no se pisen si un nombre se repite."""
+    return {f"{r['friendly_name']} ({r['device_type']}, {r['device_id']})": r["device_id"] for r in registry}
 
 
 def _supports_elicitation(ctx: Context) -> bool:

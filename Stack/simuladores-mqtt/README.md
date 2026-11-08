@@ -26,14 +26,14 @@ docker compose down
 
 ## Dispositivos simulados
 
-Cada simulador imita al firmware (ver [`Firmware/sensorHub`](../../Firmware/sensorHub)) y usa un `device_id` con el mismo formato que los reales: 12 caracteres hexadecimales en minúsculas (la MAC sin separadores), con un mismo carácter repetido para distinguirlos. Se cambia con la variable `DEVICE_ID`. Los mismos ids están registrados en [`MCP/devices.csv`](../../MCP/devices.csv).
+Cada simulador imita al firmware (ver [`Firmware/sensorHub`](../../Firmware/sensorHub)) y simula **todos los dispositivos de su tipo que figuran en [`MCP/devices.csv`](../../MCP/devices.csv)** (el compose lo monta en `/app/devices.csv`, y se puede cambiar con `DEVICES_CSV`): un cliente MQTT por dispositivo, cada uno con su propio Last Will. Si el archivo no existe, simulan un único dispositivo con `DEVICE_ID`. Con `EXCLUIR_IDS` (ids separados por coma) se omiten dispositivos, por ejemplo los nodos físicos reales, que también figuran en el registro.
 
 | Simulador | `device_id` | Topic de telemetría | `retain` | Qué publica |
 |---|---|---|:---:|---|
-| `simulador-dht` | `aaaaaaaaaaaa` | `sensorhub/dht/aaaaaaaaaaaa/telemetry` | sí | `temperature`, `humidity`, `ts`, cada 10 s (`INTERVALO_SEGUNDOS`). La temperatura sube de 10 en 10 °C de 0 a 90 y vuelve a empezar; la humedad es fija en 50 % |
-| `simulador-pir` | `bbbbbbbbbbbb` | `sensorhub/pir/bbbbbbbbbbbb/telemetry` | no | `motion`, `ts`: el estado inicial (reposo) al arrancar y después cada cambio, con una espera aleatoria entre 2 y 8 s |
-| `simulador-switch` | `cccccccccccc` | `sensorhub/switch/cccccccccccc/telemetry` | sí | Responde a `.../command` con `state`, `ts`. Solo acepta `{"state": "on"}` u `{"state": "off"}` en minúscula; cualquier otra cosa se ignora, igual que el firmware |
-| `simulador-switch-commander` | (comanda a `cccccccccccc`) | — | no | Manda `on`/`off` alternados cada 4 s |
+| `simulador-dht` | todos los `dht` del CSV | `sensorhub/dht/<device_id>/telemetry` | sí | `temperature`, `humidity`, `ts`, cada 10 s (`INTERVALO_SEGUNDOS`). La temperatura sube de 5 en 5 °C de 0 a 50 y la humedad de 6 en 6 puntos de 20 a 80 % (el rango real del DHT11) y vuelve a empezar (cada dispositivo arranca en un punto distinto de la rampa). No se valida el rango: cualquier valor publicado se acepta tal cual |
+| `simulador-pir` | todos los `pir` del CSV | `sensorhub/pir/<device_id>/telemetry` | no | `motion`, `ts`: el estado inicial (reposo) al arrancar y después cada cambio, con una espera aleatoria entre 2 y 8 s |
+| `simulador-switch` | todos los `switch` del CSV | `sensorhub/switch/<device_id>/telemetry` | sí | Responde a `.../command` con `state`, `ts`. Solo acepta `{"state": "on"}` u `{"state": "off"}` en minúscula; cualquier otra cosa se ignora, igual que el firmware |
+| `simulador-switch-commander` | (comanda a todos los `switch` del CSV) | — | no | Manda `on`/`off` alternados cada 4 s a todos |
 
 Todos publican además en `.../status` (QoS 1, `retain`): `{"online": true, "ts": ...}` al conectarse y el Last Will `{"online": false}`. QoS 1 en todo.
 
