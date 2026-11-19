@@ -12,6 +12,7 @@ from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ..influx_client import (
+    availability_gaps,
     query_latest_true_event,
     query_state_series,
     summarize_binary_state_range,
@@ -67,6 +68,46 @@ async def _query_pir_series(
     prior_active = prior_val if isinstance(prior_val, bool) else None
     bool_points = [(ts, val) for ts, val in raw_points if isinstance(val, bool)]
     return prior_active, bool_points
+
+
+# Cantidad máxima de intervalos offline que se listan en la respuesta.
+MAX_LISTED_GAPS = 10
+
+
+async def _offline_note(
+    ctx: Context, device_id: str, start_dt: datetime, end_dt: datetime, subject: str
+) -> str:
+    """Verifica la disponibilidad (`device_status.online`) del sensor durante
+    todo el rango. Devuelve '' si estuvo online todo el tiempo; si no, una
+    aclaración que lista los intervalos offline (o sin registro de presencia).
+    `subject` describe qué no puede garantizarse (p. ej. 'que no hubo movimiento')."""
+    try:
+        prior_val, raw_points = await run_blocking(
+            query_state_series, influx(ctx), "device_status", "online", device_id, start_dt, end_dt
+        )
+    except Exception as e:
+        logger.error("Error consultando presencia de PIR '%s': %s", device_id, e)
+        raise ToolError(INFLUX_UNAVAILABLE) from e
+
+    prior_online = prior_val if isinstance(prior_val, bool) else None
+    points = [(ts, v) for ts, v in raw_points if isinstance(v, bool)]
+    gaps = availability_gaps(prior_online, points, start_dt, end_dt)
+    if not gaps:
+        return ""
+
+    fmt = "%Y-%m-%d %H:%M:%S"
+    lines = []
+    for g_start, g_end, state in gaps[:MAX_LISTED_GAPS]:
+        # state=None (sin ningún registro de presencia) se informa igual como offline:
+        # no hay evidencia de que el dispositivo estuviera conectado.
+        lines.append(f"- {g_start.strftime(fmt)} a {g_end.strftime(fmt)} UTC (offline)")
+    if len(gaps) > MAX_LISTED_GAPS:
+        lines.append(f"- ... y {len(gaps) - MAX_LISTED_GAPS} intervalo(s) más")
+    return (
+        f" Pero el sensor no estuvo online durante todo el rango, por lo que no puede "
+        f"asegurarse {subject}. Intervalos en los que el dispositivo estuvo fuera de línea:\n"
+        + "\n".join(lines)
+    )
 
 
 def _activation_timestamps(
@@ -160,10 +201,12 @@ async def had_motion_in_range(
             f"(iniciado antes de {start_dt.strftime('%Y-%m-%d %H:%M:%S')} UTC y finalizado a las {end_motion_str})."
         )
 
-    if prior_active is None and not bool_points:
-        return f"No hay registros del sensor PIR '{device_id}' entre {rango}."
+    note = await _offline_note(ctx, device_id, start_dt, effective_end, "que no hubo movimiento")
 
-    return f"No se detectó movimiento en el sensor PIR '{device_id}' entre {rango}."
+    if prior_active is None and not bool_points:
+        return f"No hay registros del sensor PIR '{device_id}' entre {rango}." + note
+
+    return f"No se detectó movimiento en el sensor PIR '{device_id}' entre {rango}." + note
 
 
 @mcp.tool(annotations=read_only("Contar eventos de movimiento en un rango"))
@@ -186,14 +229,17 @@ async def count_motion_events(
     prior_active, bool_points = await _query_pir_series(ctx, device_id, start_dt, effective_end)
     summary = summarize_binary_state_range(prior_active, bool_points, start_dt, effective_end)
     rango = _format_range(start_dt, effective_end)
+    note = await _offline_note(
+        ctx, device_id, start_dt, effective_end, "que el conteo sea completo (pudo haber movimientos no detectados)"
+    )
 
     if not summary.had_data:
-        return f"No hay registros de actividad del sensor PIR '{device_id}' entre {rango}."
+        return f"No hay registros de actividad del sensor PIR '{device_id}' entre {rango}." + note
 
     if summary.activations == 0:
         return (
             f"Entre {rango}, no se registraron eventos de movimiento (0 detecciones) "
-            f"en el sensor PIR '{device_id}'."
+            f"en el sensor PIR '{device_id}'." + note
         )
 
     act_times = _activation_timestamps(prior_active, bool_points)
@@ -201,12 +247,12 @@ async def count_motion_events(
         t_str = act_times[0].strftime("%Y-%m-%d %H:%M:%S UTC")
         return (
             f"Entre {rango}, se registró 1 evento de movimiento en el sensor PIR '{device_id}' "
-            f"(a las {t_str})."
+            f"(a las {t_str})." + note
         )
 
     first_str = act_times[0].strftime("%Y-%m-%d %H:%M:%S UTC")
     last_str = act_times[-1].strftime("%Y-%m-%d %H:%M:%S UTC")
     return (
         f"Entre {rango}, se registraron {summary.activations} eventos de movimiento en el sensor "
-        f"PIR '{device_id}' (primero a las {first_str}, último a las {last_str})."
+        f"PIR '{device_id}' (primero a las {first_str}, último a las {last_str})." + note
     )
