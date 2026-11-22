@@ -238,3 +238,32 @@ def summarize_binary_state_range(
         deactivations=deactivations,
         active_seconds=active_seconds,
     )
+
+
+def availability_gaps(
+    prior_online: Optional[bool],
+    points: list[tuple[datetime, bool]],
+    start_dt: datetime,
+    end_dt: datetime,
+) -> list[tuple[datetime, datetime, Optional[bool]]]:
+    """Intervalos de `[start_dt, end_dt]` en los que el dispositivo NO estuvo
+    confirmado online, a partir de la serie de `device_status.online`.
+
+    Devuelve tuplas `(inicio, fin, estado)` con `estado=False` (offline: llegó un
+    `online=false`, típicamente el Last Will) o `estado=None` (sin registro de
+    presencia: no hay ningún punto previo que diga en qué estado estaba; el
+    llamador decide cómo informarlo).
+    Lista vacía = online durante todo el rango."""
+    gaps: list[tuple[datetime, datetime, Optional[bool]]] = []
+    state = prior_online
+    cursor = start_dt
+    for raw_ts, online in points:
+        ts = min(max(raw_ts, start_dt), end_dt)
+        if online is state:
+            continue
+        if state is not True and ts > cursor:
+            gaps.append((cursor, ts, state))
+        cursor, state = ts, online
+    if state is not True and end_dt > cursor:
+        gaps.append((cursor, end_dt, state))
+    return gaps
