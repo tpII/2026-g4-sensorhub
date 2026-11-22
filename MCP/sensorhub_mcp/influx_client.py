@@ -49,14 +49,15 @@ def query_latest_true_event(
     measurement: str,
     field: str,
     device_id: str,
-    hours: int = 24 * 30,
-) -> Optional[str]:
-    """Obtiene la fecha/hora UTC del último registro donde `field` vale `true`
+) -> Optional[datetime]:
+    """Obtiene la fecha/hora UTC (datetime) del último registro donde `field` vale `true`
     (por ejemplo `motion == true` en `pir_telemetry`), ignorando los eventos
-    posteriores con `false`. Retorna `None` si no hubo ninguno en `hours`."""
+    posteriores con `false`. Busca en todo el historial del bucket (`range(start: 0)`:
+    Flux exige un `range()`, y 0 es el inicio de los tiempos) y retorna `None` si
+    nunca hubo ninguno."""
     flux_query = f'''
     from(bucket: "{INFLUXDB_BUCKET}")
-      |> range(start: -{hours}h)
+      |> range(start: 0)
       |> filter(fn: (r) => r._measurement == "{measurement}")
       |> filter(fn: (r) => r.device_id == "{device_id}")
       |> filter(fn: (r) => r._field == "{field}" and r._value == true)
@@ -65,7 +66,7 @@ def query_latest_true_event(
     tables = client.query_api().query(flux_query, org=INFLUXDB_ORG)
     for table in tables:
         for record in table.records:
-            return record.get_time().astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            return record.get_time().astimezone(timezone.utc)
     return None
 
 
@@ -141,17 +142,35 @@ def query_state_series(
     device_id: str,
     start_dt: datetime,
     stop_dt: datetime,
-    lookback_days: int = 30,
+    lookback_days: Optional[int] = 30,
+    fetch_prior: bool = True,
 ) -> tuple[Any, list[tuple[datetime, Any]]]:
-    """Obtiene el estado vigente al inicio del rango (último punto anterior a
-    `start_dt`, mirando hasta `lookback_days` hacia atrás) y la serie ordenada
-    cronológicamente de puntos `(timestamp_utc, valor)` dentro de `[start_dt, stop_dt)`.
+    """Trae una serie de estados booleanos en un rango, junto con el estado vigente
+    al inicio de ese rango. Sirve para cualquier serie temporal orientada a eventos
+    (un actuador encendido/apagado, un sensor que detecta/no detecta, un dispositivo
+    online/offline, etc.). Devuelve `(prior_val, points)`:
 
-    Consultar el estado previo evita dos errores clásicos en series orientadas a
-    eventos: reportar 0 s encendidos cuando el actuador se prendió antes de `start_dt`
-    y siguió prendido todo el rango sin emitir mensajes nuevos, o contar un
-    duplicado QoS 1 al comienzo del rango como si fuera una transición nueva."""
-    prior_start = _flux_rfc3339(start_dt - timedelta(days=lookback_days))
+    - `prior_val`: el último punto anterior a `start_dt`, buscando hasta `lookback_days`
+      hacia atrás (o en todo el historial si es `None`).
+    - `points`: los puntos `(timestamp_utc, valor)` dentro de `[start_dt, stop_dt)`,
+      ordenados cronológicamente.
+
+    En estas series solo se escribe un punto cuando algo cambia. Por eso mirar
+    únicamente los puntos dentro del rango lleva a dos errores:
+
+    1. Perder el estado que ya traía el rango. Si el estado cambió antes de `start_dt`
+       y no hubo ningún cambio después, no hay puntos dentro del rango, y parecería
+       que no hay información. Con el estado previo se sabe en qué estado estuvo todo
+       el rango (por ejemplo, 0 s activo en vez del tiempo completo, o un dispositivo
+       caído antes del rango dado por conectado).
+    2. Contar una transición falsa al inicio. Con QoS 1 el broker puede entregar un
+       mensaje duplicado; si el estado previo ya era el mismo, un valor repetido justo
+       al comienzo del rango se descarta en vez de contarse como un cambio nuevo.
+
+    Con `fetch_prior=False` se omite la consulta del estado previo (`prior_val` es
+    `None`): para cuando el llamador ya conoce el estado al inicio del rango."""
+    # `lookback_days=None`: sin límite (Flux exige un inicio de rango; 0 = inicio de los tiempos).
+    prior_start = "0" if lookback_days is None else _flux_rfc3339(start_dt - timedelta(days=lookback_days))
     start_rfc3339 = _flux_rfc3339(start_dt)
     # En Flux, `stop` es exclusivo; +1 ms incluye lecturas tomadas exactamente en `stop_dt`.
     stop_rfc3339 = _flux_rfc3339(stop_dt + timedelta(milliseconds=1))
@@ -165,9 +184,10 @@ def query_state_series(
       |> last()
     '''
     prior_val = None
-    for table in client.query_api().query(prior_query, org=INFLUXDB_ORG):
-        for record in table.records:
-            prior_val = record.get_value()
+    if fetch_prior:
+        for table in client.query_api().query(prior_query, org=INFLUXDB_ORG):
+            for record in table.records:
+                prior_val = record.get_value()
 
     range_query = f'''
     from(bucket: "{INFLUXDB_BUCKET}")
