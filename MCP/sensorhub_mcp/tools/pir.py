@@ -172,7 +172,10 @@ async def had_motion_in_range(
     Verifica si un sensor PIR detectó movimiento al menos una vez dentro de un
     rango de tiempo (por ejemplo '¿hubo movimiento en la cocina en la última
     hora?'). Si se necesita saber cuántas veces exactas se detectó movimiento,
-    usar count_motion_events. Si el usuario nombró el sensor por un lugar o un
+    usar count_motion_events. Si la respuesta indica que el sensor estuvo offline
+    en algún intervalo del rango, informar esos intervalos al usuario y no afirmar
+    que no hubo movimiento: solo se puede asegurar en los períodos en que el
+    sensor estuvo online. Si el usuario nombró el sensor por un lugar o un
     apodo, llamar primero a resolve_device_id con device_type='pir'; si dio su
     device_id, usarlo directamente.
     """
@@ -219,8 +222,10 @@ async def count_motion_events(
     """
     Cuenta cuántas veces se activó la detección de movimiento (transiciones de
     reposo a movimiento, false -> true) en un sensor PIR durante un rango de
-    tiempo (por ejemplo '¿cuántas veces entró alguien a la cocina hoy?'). Si el
-    usuario nombró el sensor por un lugar o un apodo, llamar primero a
+    tiempo (por ejemplo '¿cuántas veces entró alguien a la cocina hoy?'). Si la
+    respuesta indica que el sensor estuvo offline en algún intervalo del rango,
+    informar esos intervalos: el conteo es un mínimo, pudo haber movimientos no
+    detectados mientras estuvo desconectado. Si el usuario nombró el sensor por un lugar o un apodo, llamar primero a
     resolve_device_id con device_type='pir'; si dio su device_id, usarlo
     directamente.
     """
