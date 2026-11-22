@@ -5,7 +5,7 @@ wiki, 03, sección 6), por lo que ninguna tool de PIR lee mensajes retenidos de
 MQTT: todas consultan directamente la medición `pir_telemetry` en InfluxDB."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from mcp.server.mcpserver import Context
@@ -32,9 +32,6 @@ from .common import (
 
 logger = logging.getLogger(__name__)
 
-# Un sensor PIR es puramente orientado a eventos: en un ambiente sin tránsito
-# puede pasar días sin emitir un mensaje sin que eso implique una falla.
-PIR_LAST_EVENT_LOOKBACK_HOURS = 24 * 30
 
 
 async def _pir(device_id: str) -> str:
@@ -74,35 +71,64 @@ async def _query_pir_series(
 MAX_LISTED_GAPS = 10
 
 
-async def _offline_note(
-    ctx: Context, device_id: str, start_dt: datetime, end_dt: datetime, subject: str
-) -> str:
+async def _offline_lines(
+    ctx: Context,
+    device_id: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    online_at_start: bool = False,
+) -> list[str]:
     """Verifica la disponibilidad (`device_status.online`) del sensor durante
-    todo el rango. Devuelve '' si estuvo online todo el tiempo; si no, una
-    aclaración que lista los intervalos offline (o sin registro de presencia).
-    `subject` describe qué no puede garantizarse (p. ej. 'que no hubo movimiento')."""
+    todo `[start_dt, end_dt]`. Devuelve [] si estuvo online todo el tiempo; si no,
+    una línea por intervalo offline (acotada a MAX_LISTED_GAPS).
+
+    Por defecto el estado al inicio se busca en el historial (último `online`
+    anterior a `start_dt`). Con `online_at_start=True` se da por sabido que el
+    sensor estaba online en `start_dt` (p. ej. porque acababa de publicar una
+    detección) y no se consulta el pasado."""
     try:
         prior_val, raw_points = await run_blocking(
-            query_state_series, influx(ctx), "device_status", "online", device_id, start_dt, end_dt
+            query_state_series,
+            influx(ctx),
+            "device_status",
+            "online",
+            device_id,
+            start_dt,
+            end_dt,
+            # `online=true` se publica una sola vez al conectar (sin latido periódico): el estado
+            # vigente al inicio puede venir de un mensaje muy antiguo, así que se busca sin límite.
+            lookback_days=None,
+            fetch_prior=not online_at_start,
         )
     except Exception as e:
         logger.error("Error consultando presencia de PIR '%s': %s", device_id, e)
         raise ToolError(INFLUX_UNAVAILABLE) from e
 
-    prior_online = prior_val if isinstance(prior_val, bool) else None
+    prior_online = True if online_at_start else (prior_val if isinstance(prior_val, bool) else None)
     points = [(ts, v) for ts, v in raw_points if isinstance(v, bool)]
     gaps = availability_gaps(prior_online, points, start_dt, end_dt)
-    if not gaps:
-        return ""
 
     fmt = "%Y-%m-%d %H:%M:%S"
-    lines = []
-    for g_start, g_end, state in gaps[:MAX_LISTED_GAPS]:
-        # state=None (sin ningún registro de presencia) se informa igual como offline:
-        # no hay evidencia de que el dispositivo estuviera conectado.
-        lines.append(f"- {g_start.strftime(fmt)} a {g_end.strftime(fmt)} UTC (offline)")
+    # state=None (sin ningún registro de presencia) se informa igual como offline:
+    # no hay evidencia de que el dispositivo estuviera conectado.
+    lines = [
+        f"- {g_start.strftime(fmt)} a {g_end.strftime(fmt)} UTC (offline)"
+        for g_start, g_end, _ in gaps[:MAX_LISTED_GAPS]
+    ]
     if len(gaps) > MAX_LISTED_GAPS:
         lines.append(f"- ... y {len(gaps) - MAX_LISTED_GAPS} intervalo(s) más")
+    return lines
+
+
+async def _offline_note(
+    ctx: Context, device_id: str, start_dt: datetime, end_dt: datetime, subject: str
+) -> str:
+    """Aclaración para respuestas sobre un rango: '' si el sensor estuvo online
+    todo el tiempo; si no, lista los intervalos offline. `subject` describe qué no
+    puede garantizarse (p. ej. 'que no hubo movimiento')."""
+    lines = await _offline_lines(ctx, device_id, start_dt, end_dt)
+    if not lines:
+        return ""
     return (
         f" Pero el sensor no estuvo online durante todo el rango, por lo que no puede "
         f"asegurarse {subject}. Intervalos en los que el dispositivo estuvo fuera de línea:\n"
@@ -136,29 +162,44 @@ async def get_last_motion_event(device_id: DeviceIdParam, ctx: Context) -> str:
     última vez que hubo movimiento en la cocina?'. Para consultar si hubo
     movimiento en una ventana de tiempo, usar had_motion_in_range. Si el usuario
     nombró el sensor por un lugar o un apodo, llamar primero a resolve_device_id
-    con device_type='pir'; si dio su device_id, usarlo directamente.
+    con device_type='pir'; si dio su device_id, usarlo directamente. Si entre esa
+    detección y ahora el sensor estuvo fuera de línea, la respuesta lo informa
+    junto con los intervalos del corte: informarlos al usuario, porque pudo haber
+    movimientos posteriores sin detectar. Si el sensor nunca detectó movimiento,
+    la respuesta lo indica.
     """
     device_id = await _pir(device_id)
 
+    now_dt = datetime.now(timezone.utc)
     try:
-        time_str = await run_blocking(
+        last_dt = await run_blocking(
             query_latest_true_event,
             influx(ctx),
             "pir_telemetry",
             "motion",
             device_id,
-            PIR_LAST_EVENT_LOOKBACK_HOURS,
         )
     except Exception as e:
         logger.error("Error consultando InfluxDB para PIR '%s': %s", device_id, e)
         raise ToolError(INFLUX_UNAVAILABLE) from e
 
-    if time_str is None:
+    if last_dt is not None:
+        # Cualquier corte del sensor posterior a la última detección significa que pudo
+        # haber movimientos que no se registraron. El sensor estaba online en ese
+        # instante (acababa de publicar), así que no hace falta mirar el pasado.
+        time_str = last_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+        msg = f"La última detección de movimiento en el sensor PIR '{device_id}' fue a las {time_str}."
+        lines = await _offline_lines(ctx, device_id, last_dt, now_dt, online_at_start=True)
+        if not lines:
+            return msg
         return (
-            f"No se registraron detecciones de movimiento en los últimos 30 días "
-            f"para el sensor PIR '{device_id}'."
+            msg
+            + " Pero entre ese instante y ahora el sensor estuvo fuera de línea en los "
+            "siguientes intervalos, por lo que pudo haber movimientos posteriores sin detectar:\n"
+            + "\n".join(lines)
         )
-    return f"La última detección de movimiento en el sensor PIR '{device_id}' fue a las {time_str}."
+
+    return f"El sensor PIR '{device_id}' nunca registró movimiento (en todo el historial disponible)."
 
 
 @mcp.tool(annotations=read_only("Verificar si hubo movimiento en un rango"))
@@ -225,9 +266,9 @@ async def count_motion_events(
     tiempo (por ejemplo '¿cuántas veces entró alguien a la cocina hoy?'). Si la
     respuesta indica que el sensor estuvo offline en algún intervalo del rango,
     informar esos intervalos: el conteo es un mínimo, pudo haber movimientos no
-    detectados mientras estuvo desconectado. Si el usuario nombró el sensor por un lugar o un apodo, llamar primero a
-    resolve_device_id con device_type='pir'; si dio su device_id, usarlo
-    directamente.
+    detectados mientras estuvo desconectado. Si el usuario nombró el sensor por
+    un lugar o un apodo, llamar primero a resolve_device_id con
+    device_type='pir'; si dio su device_id, usarlo directamente.
     """
     device_id = await _pir(device_id)
     start_dt, effective_end, _ = normalize_past_range(start, end)
