@@ -1,0 +1,8 @@
+# Mismas dependencias que el ejemplo de la guía (mcp-client-python/pyproject.toml), sin python-dotenv
+anthropic>=2.8.0
+mcp>=2.3.0,<3.0.0
+# client.py importa los tipos de mcp_types, que `mcp` fija exactamente
+mcp-types>=2.2.0
+# Servidor web de la página (la guía es un chat de consola)
+fastapi>=0.115
+uvicorn>=0.30

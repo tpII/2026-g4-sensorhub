@@ -1,0 +1,24 @@
+# Cliente MCP con chat mínimo para usar el servidor MCP con un modelo remoto que implemente la
+# Messages API de Anthropic (por ejemplo vLLM en otra PC de la tailnet).
+#
+# Requisitos: el Stack (red `sensorhub_network`) y MCP/ ya levantados, y el .env de
+# esta carpeta con MCP_AUTH_TOKEN y ANTHROPIC_BASE_URL (ver .env.example).
+#   docker compose up -d --build
+#   -> http://localhost:8080
+services:
+  # Cliente MCP con chat mínimo (ver app/): una página de chat + modelo + el MCP de SensorHub.
+  cliente-mcp-chat:
+    build: ./app
+    container_name: sensorhub_cliente_mcp_chat
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    # Toda la configuración (ANTHROPIC_*, MCP_*) vive en .env; plantilla en .env.example.
+    env_file: .env
+    networks:
+      - sensorhub_network
+
+networks:
+  sensorhub_network:
+    name: sensorhub_network
+    external: true
