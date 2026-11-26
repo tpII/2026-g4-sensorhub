@@ -8,6 +8,8 @@ Servidor MCP (Model Context Protocol) que expone, como tools invocables por un L
 MCP/
 ├── .env.example           # Plantilla de variables de entorno
 ├── .env                    # Variables activas (ignorado por Git)
+├── README.md               # Esta documentación
+├── medir_latencia.py       # Script para medir la latencia de las tools
 ├── devices.csv             # Registro manual de dispositivos (device_type, device_id, nombre amigable)
 ├── docker-compose.yml      # Levanta el servidor y, opcionalmente, el MCP Inspector
 ├── Dockerfile

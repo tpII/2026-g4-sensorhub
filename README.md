@@ -243,8 +243,9 @@ cd 2026-g4-sensorhub
 │   ├── sensorHub/            # Proyecto ESP-IDF del nodo SensorHub
 │   │   ├── main/             # Código fuente del firmware
 │   │   │   ├── main.c        # Orquestador del sistema
-│   │   │   ├── app_config.h  # Configuración transversal (WiFi, MQTT, tipo de dispositivo)
-│   │   │   ├── *_mgr.c/.h    # Gestores de sistema, WiFi, MQTT, hora (SNTP) y LED de estado
+│   │   │   ├── app_config.h  # Configuración transversal (MQTT, tópicos, tipo de dispositivo)
+│   │   │   ├── secrets.h.example  # Plantilla de la contraseña MQTT (secrets.h no se versiona)
+│   │   │   ├── *_mgr.c/.h    # Gestores de sistema, WiFi, provisioning BLE, botón, MQTT, hora (SNTP) y LED
 │   │   │   ├── sensor_service.c/.h  # Despachador según CONFIG_DEVICE_TYPE
 │   │   │   └── devices/      # Módulos por tipo de dispositivo (dht, pir, switch)
 │   │   ├── sdkconfig.defaults  # Opciones de Kconfig fijadas por el proyecto
@@ -252,12 +253,13 @@ cd 2026-g4-sensorhub
 │   └── utils/                # Docker Compose para compilar, flashear y monitorear el ESP32
 ├── MCP/                      # Servidor MCP (Python, SDK oficial v2)
 │   ├── sensorhub_mcp/        # Paquete modular del servidor
-│   │   ├── tools/            # Implementación de tools (climate, device_resolution, common)
+│   │   ├── tools/            # Implementación de tools (climate, pir, switch, device_resolution, common)
 │   │   ├── resources.py      # Resource sensorhub://device-types
 │   │   ├── config.py         # Carga de variables de entorno
 │   │   ├── devices.py        # Registro y matching difuso de dispositivos
 │   │   ├── influx_client.py  # Consultas Flux y agregaciones a InfluxDB
-│   │   ├── mqtt_client.py    # Cliente MQTT para mensajes retenidos
+│   │   ├── mqtt_client.py    # Cliente MQTT: mensajes retenidos y envío de comandos
+│   │   ├── auth.py           # Autenticación con token fijo (middleware Bearer)
 │   │   ├── mcp_app.py        # MCPServer: lifespan, instrucciones, transporte y seguridad HTTP
 │   │   ├── timeutils.py      # Conversión de timestamps ISO 8601 a Flux
 │   │   └── main.py           # Entrypoint del servidor
@@ -265,10 +267,16 @@ cd 2026-g4-sensorhub
 │   ├── docker-compose.yml    # Despliegue de mcp-server y mcp-inspector
 │   ├── Dockerfile
 │   ├── requirements.txt
+│   ├── medir_latencia.py     # Script para medir la latencia de las tools
 │   └── README.md             # Guía detallada de uso del componente MCP
 ├── Stack/                    # Docker Compose de infraestructura
 │   ├── docker-compose.yml    # EMQX 5.8 + InfluxDB 2.7
+│   ├── broker/               # Plantillas de EMQX (config, ACL y reglas) y entrypoint de arranque en frío
+│   ├── influxdb/init/        # Script de arranque en frío: usuario de solo lectura del MCP
+│   ├── MQTT.md               # Especificación de tópicos y payloads
 │   ├── simuladores-mqtt/     # Simuladores Python de DHT, PIR y Switch
+│   ├── cliente-mcp-chat/     # Cliente MCP con página de chat
+│   ├── tunel-local/          # Exposición con Tailscale Funnel
 │   └── README.md             # Guía de configuración del stack y reglas SQL
 ├── start.ps1                 # Script de inicio rápido para Windows (PowerShell)
 ├── start.sh                  # Script de inicio rápido para Linux / macOS (bash)

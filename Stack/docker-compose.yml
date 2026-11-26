@@ -47,7 +47,13 @@ services:
       - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET:-sensorhub}
       - DOCKER_INFLUXDB_INIT_RETENTION=${INFLUXDB_RETENTION:-0}
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN:-sensorhub_admin_secret_token_123}
+      # Usuario de solo lectura para el servidor MCP (ver influxdb/init/01-usuario-lectura.sh).
+      # Sin contraseña por defecto, igual que los usuarios MQTT.
+      - INFLUXDB_READER_USERNAME=${INFLUXDB_READER_USERNAME:-mcp_reader}
+      - INFLUXDB_READER_PASSWORD=${INFLUXDB_READER_PASSWORD:?Falta INFLUXDB_READER_PASSWORD en .env}
     volumes:
+      # Scripts que corren una sola vez en el arranque en frío (usuario de solo lectura)
+      - ./influxdb/init:/docker-entrypoint-initdb.d:ro
       # Volumen exclusivo para datos de series temporales (TSDB)
       - influxdb_data:/var/lib/influxdb2
     networks:
