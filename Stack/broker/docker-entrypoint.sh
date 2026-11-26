@@ -19,6 +19,8 @@ substitute_vars() {
         -e "s|\${INFLUXDB_ADMIN_TOKEN}|${INFLUXDB_ADMIN_TOKEN}|g" \
         -e "s|\${INFLUXDB_ORG}|${INFLUXDB_ORG:-sensorhub}|g" \
         -e "s|\${INFLUXDB_BUCKET}|${INFLUXDB_BUCKET:-sensorhub}|g" \
+        -e "s|\${MQTT_ESP_USERNAME}|${MQTT_ESP_USERNAME}|g" \
+        -e "s|\${MQTT_MCP_USERNAME}|${MQTT_MCP_USERNAME}|g" \
         "$1" > "$2"
 }
 
@@ -57,7 +59,12 @@ fi
     } > "$TARGET_DIR/auth-bootstrap.csv"
 )
 
-# 3. Procesar dinamicamente todas las reglas de dispositivos
+# 3. Generar la ACL (qué puede publicar / suscribirse cada usuario MQTT).
+#    Reemplaza el acl.conf por defecto de la imagen.
+echo ">> [SensorHub Bootstrap] Generando ACL MQTT (acl.conf)..."
+substitute_vars "$TEMPLATES_DIR/acl.conf.template" "$TARGET_DIR/acl.conf"
+
+# 4. Procesar dinamicamente todas las reglas de dispositivos
 if [ -d "$TEMPLATES_DIR/rules" ]; then
     mkdir -p "$TARGET_DIR/rules"
     # Imprimir un encabezado en emqx.conf para indicar que las reglas de dispositivos se agregan dinámicamente

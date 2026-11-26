@@ -59,12 +59,18 @@ Stack/
 ├── docker-compose.yml        # Definición de servicios y redes
 ├── MQTT.md                   # Especificación normativa de tópicos y payloads
 ├── README.md                 # Esta documentación
-├── simuladores-mqtt          # Contiene algunos simuladores en docker para probar EMQX e Influx
+├── simuladores-mqtt/         # Contiene algunos simuladores en docker para probar EMQX e Influx
+├── cliente-mcp-chat/         # Cliente MCP con página de chat (compose aparte)
+├── tunel-local/              # Exposición del MCP y del broker con Tailscale Funnel (compose aparte)
+├── influxdb/
+│   └── init/
+│       └── 01-usuario-lectura.sh  # Arranque en frío: crea el usuario de solo lectura del MCP
 └── broker/
     ├── templates/            # Plantillas bootstrap modulares HOCON (sin secretos)
-    │   ├── emqx.conf.template# Configuración base del broker
+    │   ├── emqx.conf.template  # Configuración base del broker
+    │   ├── acl.conf.template   # Permisos por tópico de los usuarios esp y mcp
     │   └── rules/            # Reglas y acciones por dispositivo
-    ├── docker-entrypoint.sh  # Script de auto-discovery e inyección en frío
+    ├── docker-entrypoint.sh  # Inyección en frío: emqx.conf, usuarios MQTT, ACL y reglas
     └── README.md             # Guía del Data Bridge y nuevos dispositivos
 ```
 
@@ -86,7 +92,7 @@ cd Stack
 cp .env.example .env
 ```
 
-Completar en `.env` las contraseñas MQTT (`MQTT_ESP_PASSWORD` y `MQTT_MCP_PASSWORD`): el broker no arranca sin ellas. Por ejemplo, generarlas con `openssl rand -hex 24`. Si es necesario, personalizar también el resto de las credenciales (usuario y contraseña de EMQX Dashboard, credenciales y token de InfluxDB).
+Completar en `.env` las contraseñas MQTT (`MQTT_ESP_PASSWORD` y `MQTT_MCP_PASSWORD`) y la del usuario de solo lectura de InfluxDB (`INFLUXDB_READER_PASSWORD`): el stack no arranca sin ellas. Por ejemplo, generarlas con `openssl rand -hex 24`. Si es necesario, personalizar también el resto de las credenciales (usuario y contraseña de EMQX Dashboard, credenciales y token de InfluxDB).
 
 #### Credenciales MQTT
 
@@ -96,6 +102,13 @@ EMQX exige usuario y contraseña en todos sus listeners (TCP, TLS y WebSockets);
 | :--- | :--- | :--- | :--- |
 | `esp` | `MQTT_ESP_USERNAME` / `MQTT_ESP_PASSWORD` | Todos los ESP32 y los simuladores de dispositivos | `CONFIG_MQTT_USERNAME` / `CONFIG_MQTT_PASSWORD` en [`app_config.h`](../Firmware/sensorHub/main/app_config.h); `simuladores-mqtt/.env` |
 | `mcp` | `MQTT_MCP_USERNAME` / `MQTT_MCP_PASSWORD` | El servidor MCP y el simulador que manda comandos | `MQTT_USERNAME` / `MQTT_PASSWORD` en `MCP/.env`; `simuladores-mqtt/.env` |
+
+Además, cada usuario tiene permisos acotados por una ACL ([`broker/templates/acl.conf.template`](broker/templates/acl.conf.template)); lo que no está permitido se rechaza:
+
+| Usuario | Puede publicar en | Puede suscribirse a |
+| :--- | :--- | :--- |
+| `esp` | `sensorhub/+/+/telemetry` y `sensorhub/+/+/status` | cualquier tópico |
+| `mcp` | `sensorhub/+/+/command` | cualquier tópico |
 
 Para cambiar una contraseña: editarla en `Stack/.env`, recrear el broker (`docker compose up -d`, que lo recrea al cambiar una variable) y actualizarla en los clientes. EMQX no guarda su base de usuarios en un volumen, así que cada recreación vuelve a cargarla desde `.env`.
 
@@ -141,6 +154,7 @@ docker compose ps
 > El token de administrador configurado por defecto para InfluxDB es:
 > `sensorhub_admin_secret_token_123`
 > La organización por defecto es `sensorhub` y el bucket es `sensorhub`.
+> El motor de reglas de EMQX escribe en InfluxDB con este token. El servidor MCP, en cambio, consulta con el usuario de solo lectura `INFLUXDB_READER_USERNAME` (`mcp_reader`), que se crea en el arranque en frío ([`influxdb/init/01-usuario-lectura.sh`](influxdb/init/01-usuario-lectura.sh)). Si el volumen de InfluxDB ya estaba inicializado, crearlo a mano con `docker exec sensorhub_influxdb /docker-entrypoint-initdb.d/01-usuario-lectura.sh`.
 > Estos son valores de **desarrollo local**, publicados a propósito en `.env.example` y como default en `docker-compose.yml` para que el stack levante sin pasos manuales. No son secretos de producción: si el stack se expone fuera de la máquina de desarrollo, deben reemplazarse por valores propios en `.env`.
 
 ---

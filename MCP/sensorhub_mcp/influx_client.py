@@ -9,17 +9,35 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from influxdb_client import InfluxDBClient
+from influxdb_client.rest import ApiException
 
-from .config import INFLUXDB_BUCKET, INFLUXDB_ORG, INFLUXDB_TOKEN, INFLUXDB_URL
+from .config import INFLUXDB_BUCKET, INFLUXDB_ORG, INFLUXDB_PASSWORD, INFLUXDB_URL, INFLUXDB_USERNAME
 
 
 def get_influx_client() -> InfluxDBClient:
+    """Cliente autenticado con el usuario de solo lectura (INFLUXDB_USERNAME /
+    INFLUXDB_PASSWORD): la librería abre una sesión (/api/v2/signin) en la
+    primera consulta y reutiliza su cookie."""
     return InfluxDBClient(
         url=INFLUXDB_URL,
-        token=INFLUXDB_TOKEN,
+        username=INFLUXDB_USERNAME,
+        password=INFLUXDB_PASSWORD,
         org=INFLUXDB_ORG,
         timeout=10000,
     )
+
+
+def _query(client: InfluxDBClient, flux_query: str):
+    """Ejecuta una consulta Flux. La sesión de InfluxDB vence tras 60 min sin
+    uso y la librería no vuelve a hacer signin sola: ante un 401 se descarta la
+    cookie (la siguiente consulta abre una sesión nueva) y se reintenta una vez."""
+    try:
+        return client.query_api().query(flux_query, org=INFLUXDB_ORG)
+    except ApiException as e:
+        if e.status != 401:
+            raise
+        client.api_client.cookie = None
+        return client.query_api().query(flux_query, org=INFLUXDB_ORG)
 
 
 def query_latest_telemetry(client: InfluxDBClient, measurement: str, field: str, device_id: str, hours: int = 24):
@@ -35,7 +53,7 @@ def query_latest_telemetry(client: InfluxDBClient, measurement: str, field: str,
       |> filter(fn: (r) => r._field == "{field}")
       |> last()
     '''
-    tables = client.query_api().query(flux_query, org=INFLUXDB_ORG)
+    tables = _query(client, flux_query)
     for table in tables:
         for record in table.records:
             val = record.get_value()
@@ -63,7 +81,7 @@ def query_latest_true_event(
       |> filter(fn: (r) => r._field == "{field}" and r._value == true)
       |> last()
     '''
-    tables = client.query_api().query(flux_query, org=INFLUXDB_ORG)
+    tables = _query(client, flux_query)
     for table in tables:
         for record in table.records:
             return record.get_time().astimezone(timezone.utc)
@@ -82,7 +100,7 @@ def query_latest_climate(client: InfluxDBClient, device_id: str, hours: int = 24
       |> sort(columns: ["_time"], desc: true)
       |> limit(n: 1)
     '''
-    tables = client.query_api().query(flux_query, org=INFLUXDB_ORG)
+    tables = _query(client, flux_query)
     for table in tables:
         for record in table.records:
             time_str = record.get_time().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -103,7 +121,7 @@ def query_field_aggregate(
       |> filter(fn: (r) => r._field == "{field}")
       |> {agg}()
     '''
-    tables = client.query_api().query(flux_query, org=INFLUXDB_ORG)
+    tables = _query(client, flux_query)
     for table in tables:
         for record in table.records:
             # mean() no trae columna _time (no hay un instante único al
@@ -185,7 +203,7 @@ def query_state_series(
     '''
     prior_val = None
     if fetch_prior:
-        for table in client.query_api().query(prior_query, org=INFLUXDB_ORG):
+        for table in _query(client, prior_query):
             for record in table.records:
                 prior_val = record.get_value()
 
@@ -198,7 +216,7 @@ def query_state_series(
       |> sort(columns: ["_time"], desc: false)
     '''
     points: list[tuple[datetime, Any]] = []
-    for table in client.query_api().query(range_query, org=INFLUXDB_ORG):
+    for table in _query(client, range_query):
         for record in table.records:
             points.append((record.get_time().astimezone(timezone.utc), record.get_value()))
 

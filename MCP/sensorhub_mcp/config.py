@@ -15,7 +15,9 @@ MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 
 # Conexion a InfluxDB
 INFLUXDB_URL = os.getenv("INFLUXDB_URL", "http://sensorhub_influxdb:8086")
-INFLUXDB_TOKEN = os.getenv("INFLUXDB_TOKEN", "sensorhub_admin_secret_token_123")
+# Usuario de solo lectura (INFLUXDB_READER_USERNAME / INFLUXDB_READER_PASSWORD de Stack/.env)
+INFLUXDB_USERNAME = os.getenv("INFLUXDB_USERNAME", "mcp_reader")
+INFLUXDB_PASSWORD = os.getenv("INFLUXDB_PASSWORD", "")
 INFLUXDB_ORG = os.getenv("INFLUXDB_ORG", "sensorhub")
 INFLUXDB_BUCKET = os.getenv("INFLUXDB_BUCKET", "sensorhub")
 

@@ -98,11 +98,16 @@ authentication = [
 ]
 
 ## ------------------------------------------------------------------------------
-## Autorización de Clientes MQTT (Acceso abierto por defecto en red local)
+## Autorización de Clientes MQTT (ACL por usuario)
+## El entrypoint genera acl.conf desde templates/acl.conf.template:
+## - esp: publica solo en sensorhub/+/+/telemetry y sensorhub/+/+/status
+## - mcp: publica solo en sensorhub/+/+/command
+## Ambos pueden suscribirse a cualquier tópico. Lo que no está permitido
+## explícitamente se rechaza.
 ## ------------------------------------------------------------------------------
 authorization {
   deny_action = ignore
-  no_match = allow
+  no_match = deny
   sources = [
     {
       type = file

@@ -1,0 +1,23 @@
+%% ==============================================================================
+%% SensorHub - ACL de clientes MQTT (EMQX 5.x, fuente "file")
+%% El entrypoint reemplaza ${MQTT_ESP_USERNAME} y ${MQTT_MCP_USERNAME} con los
+%% valores de Stack/.env y genera /opt/emqx/etc/acl.conf al arrancar.
+%%
+%% Las reglas se evalúan en orden y gana la primera que coincide. Todo lo que no
+%% coincide con ninguna se rechaza (regla final y no_match = deny en emqx.conf).
+%% Los tópicos siguen la convención sensorhub/<device_type>/<device_id>/<canal>
+%% (ver Stack/MQTT.md).
+%% ==============================================================================
+
+%% Dispositivos (ESP32 y simuladores): publican telemetría y estado (LWT),
+%% y pueden suscribirse a cualquier tópico (p. ej. sus .../command).
+{allow, {username, "${MQTT_ESP_USERNAME}"}, publish, ["sensorhub/+/+/telemetry", "sensorhub/+/+/status"]}.
+{allow, {username, "${MQTT_ESP_USERNAME}"}, subscribe, ["#"]}.
+
+%% Servidor MCP (y el simulador que manda comandos): publica solo órdenes,
+%% y puede suscribirse a cualquier tópico.
+{allow, {username, "${MQTT_MCP_USERNAME}"}, publish, ["sensorhub/+/+/command"]}.
+{allow, {username, "${MQTT_MCP_USERNAME}"}, subscribe, ["#"]}.
+
+%% Cualquier otro cliente o acción: denegado.
+{deny, all}.
