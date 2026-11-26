@@ -19,6 +19,7 @@ static const char *TAG = "MQTT_MGR";
 static esp_mqtt_client_handle_t client = NULL;
 static bool is_connected = false;
 static mqtt_msg_callback_t s_msg_callback = NULL;
+static mqtt_connect_callback_t s_connect_callback = NULL;
 static char s_subscribed_topic[80] = {0};
 static int s_subscribed_qos = 1;
 
@@ -46,7 +47,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             led_mgr_notify_activity();
             ESP_LOGI(TAG, "Publicado estado ONLINE retenido en [%s]: %s", system_get_status_topic(), online_msg);
 
-            // 2. Re-suscribir si habia un topico registrado (resiliencia a reconexiones del broker)
+            // 2. Notificar al device registrado (ej. switch republica su estado actual tras reconectar)
+            if (s_connect_callback) {
+                s_connect_callback();
+            }
+
+            // 3. Re-suscribir si habia un topico registrado (resiliencia a reconexiones del broker)
             if (s_subscribed_topic[0] != '\0') {
                 esp_mqtt_client_subscribe(client, s_subscribed_topic, s_subscribed_qos);
                 ESP_LOGI(TAG, "Re-suscrito automaticamente a: %s", s_subscribed_topic);
@@ -141,6 +147,10 @@ esp_err_t mqtt_mgr_subscribe(const char *topic, int qos) {
 
 void mqtt_mgr_set_on_message_callback(mqtt_msg_callback_t cb) {
     s_msg_callback = cb;
+}
+
+void mqtt_mgr_set_on_connect_callback(mqtt_connect_callback_t cb) {
+    s_connect_callback = cb;
 }
 
 bool mqtt_mgr_is_connected(void) {

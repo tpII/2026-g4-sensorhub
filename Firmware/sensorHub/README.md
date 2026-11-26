@@ -140,7 +140,7 @@ Los tópicos se construyen automáticamente en tiempo de ejecución con la fórm
 | | `telemetry` | `sensorhub/pir/<id>/telemetry` | Fin de detección / Reposo | `{"motion":false,"ts":1718000000000}` |
 | **`switch`** | `command` | `sensorhub/switch/<id>/command` | Orden: Encender actuador | `{"state":"on"}` |
 | | `command` | `sensorhub/switch/<id>/command` | Orden: Apagar actuador | `{"state":"off"}` |
-| | `telemetry` | `sensorhub/switch/<id>/telemetry` | Feedback de estado (Retained) | `{"state":"on","ts":1718000000000}` o `{"state":"off","ts":1718000000000}` |
+| | `telemetry` | `sensorhub/switch/<id>/telemetry` | Estado inicial (`off`) al arrancar, republicación al reconectar y feedback de comandos (Retained) | `{"state":"on","ts":1718000000000}` o `{"state":"off","ts":1718000000000}` |
 | **`*` (todos)** | `status` | `sensorhub/<type>/<id>/status` | Presencia online / caída LWT (Retained) | `{"online":true,"ts":1718000000000}` / `{"online":false}` |
 
 **`ts`** es la hora de generación en epoch de milisegundos, obtenida del reloj sincronizado por SNTP. Si el reloj todavía no sincronizó, el campo se omite y EMQX usa su propia hora de llegada. El Last Will (`{"online":false}`) nunca lleva `ts`. Los comandos que llegan al switch pueden traer `ts` (lo agrega el MCP); el firmware lo ignora.

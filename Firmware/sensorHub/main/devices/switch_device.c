@@ -5,9 +5,50 @@
 
 #include "cJSON.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include <string.h>
 
 static const char *TAG = "SWITCH_DEVICE";
+// Estado logico actual de la salida (false = "off", true = "on"); inicia apagada
+static bool s_current_state = false;
+
+static esp_err_t publish_switch_state(bool is_on) {
+    const char *state_str = is_on ? "on" : "off";
+    // Crea el objeto de feedback {} y le agrega el campo string "state"
+    cJSON *fb = cJSON_CreateObject();
+    if (!fb) {
+        ESP_LOGE(TAG, "Sin memoria para crear JSON de estado");
+        return ESP_ERR_NO_MEM;
+    }
+    cJSON_AddStringToObject(fb, "state", state_str);
+    // Hora de la confirmacion; sin hora valida se omite "ts" y EMQX usa la hora de llegada
+    int64_t ts = time_mgr_now_ms();
+    if (ts > 0) cJSON_AddNumberToObject(fb, "ts", (double)ts);
+
+    // Serializa el feedback a texto JSON sin espacios (reserva memoria dinamica)
+    char *fb_str = cJSON_PrintUnformatted(fb);
+    esp_err_t ret = ESP_ERR_NO_MEM;
+    if (fb_str) {
+        ret = mqtt_mgr_publish_with_flags(system_get_telemetry_topic(), fb_str,
+                                          CONFIG_SWITCH_TELEMETRY_QOS, CONFIG_SWITCH_TELEMETRY_RETAIN);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Estado publicado en [%s]: %s", system_get_telemetry_topic(), fb_str);
+        } else {
+            ESP_LOGW(TAG, "Fallo al publicar estado en [%s]: %s",
+                     system_get_telemetry_topic(), esp_err_to_name(ret));
+        }
+        cJSON_free(fb_str);
+    }
+    cJSON_Delete(fb);
+    return ret;
+}
+
+static void on_mqtt_connected(void) {
+    // Tras una reconexion (o reinicio de EMQX), republica el estado real de la salida
+    ESP_LOGI(TAG, "Reconexion MQTT: republicando estado actual del switch (%s)",
+             s_current_state ? "on" : "off");
+    publish_switch_state(s_current_state);
+}
 
 static void on_switch_command(const char *topic, int topic_len, const char *data, int data_len) {
     char topic_buf[96] = {0};
@@ -39,41 +80,26 @@ static void on_switch_command(const char *topic, int topic_len, const char *data
         return;
     }
 
-    int new_level = -1;
+    bool new_state = false;
     if (strcmp(state_item->valuestring, "on") == 0) {
-        new_level = 1;
+        new_state = true;
     } else if (strcmp(state_item->valuestring, "off") == 0) {
-        new_level = 0;
+        new_state = false;
     } else {
         ESP_LOGW(TAG, "Valor invalido para 'state': '%s'. Solo se admite \"on\" o \"off\"", state_item->valuestring);
         cJSON_Delete(json);
         return;
     }
 
-    int physical_pin_level = (new_level == 1) ? CONFIG_SWITCH_ACTIVE_LEVEL : !CONFIG_SWITCH_ACTIVE_LEVEL;
+    int physical_pin_level = new_state ? CONFIG_SWITCH_ACTIVE_LEVEL : !CONFIG_SWITCH_ACTIVE_LEVEL;
     gpio_set_level(CONFIG_SWITCH_PIN, physical_pin_level);
+    s_current_state = new_state;
     ESP_LOGI(TAG, "Switch conmutado a: %s (GPIO %d = nivel %d)",
-             new_level ? "on" : "off", CONFIG_SWITCH_PIN, physical_pin_level);
+             s_current_state ? "on" : "off", CONFIG_SWITCH_PIN, physical_pin_level);
 
     // Feedback al tópico de telemetría en minúsculas estándar (estado + ts)
-    const char *state_str = new_level ? "on" : "off";
-    // Crea el objeto de feedback {} y le agrega el campo string "state"
-    cJSON *fb = cJSON_CreateObject();
-    cJSON_AddStringToObject(fb, "state", state_str);
-    // Hora de la confirmacion; sin hora valida se omite "ts" y EMQX usa la hora de llegada
-    int64_t ts = time_mgr_now_ms();
-    if (ts > 0) cJSON_AddNumberToObject(fb, "ts", (double)ts);
-
-    // Serializa el feedback a texto JSON sin espacios (reserva memoria dinamica)
-    char *fb_str = cJSON_PrintUnformatted(fb);
-    if (fb_str) {
-        mqtt_mgr_publish_with_flags(system_get_telemetry_topic(), fb_str,
-                                    CONFIG_SWITCH_TELEMETRY_QOS, CONFIG_SWITCH_TELEMETRY_RETAIN);
-        ESP_LOGI(TAG, "Feedback enviado a [%s]: %s", system_get_telemetry_topic(), fb_str);
-        cJSON_free(fb_str);
-    }
-    // Libera el objeto de feedback y el JSON parseado del comando
-    cJSON_Delete(fb);
+    publish_switch_state(s_current_state);
+    // Libera el JSON parseado del comando
     cJSON_Delete(json);
 }
 
@@ -84,9 +110,19 @@ esp_err_t switch_device_start(void) {
     gpio_set_direction(CONFIG_SWITCH_PIN, GPIO_MODE_OUTPUT);
     // Nivel inactivo al arrancar, para que la carga inicie apagada
     gpio_set_level(CONFIG_SWITCH_PIN, !CONFIG_SWITCH_ACTIVE_LEVEL);
+    s_current_state = false;
 
-    // Registra callback de mensajes entrantes
+    // Publica el estado inicial ("off") retenido antes de suscribirse a comandos, para que el broker
+    // y la base reflejen la salida real tras un arranque o reinicio del nodo
+    esp_err_t pub_ret = publish_switch_state(s_current_state);
+    if (pub_ret != ESP_OK) {
+        ESP_LOGW(TAG, "No se pudo publicar el estado inicial del switch (%s)", esp_err_to_name(pub_ret));
+        return pub_ret;
+    }
+
+    // Registra callbacks de mensajes entrantes y reconexion MQTT
     mqtt_mgr_set_on_message_callback(on_switch_command);
+    mqtt_mgr_set_on_connect_callback(on_mqtt_connected);
 
     // Suscribe al topico de comandos del actuador
     const char *cmd_topic = system_get_command_topic();

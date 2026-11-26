@@ -7,13 +7,28 @@ from comun import (BROKER_HOST, MQTT_PORT, PREFIJO_TOPICOS,
 
 # Un cliente MQTT por cada switch de devices.csv; todos usan los mismos callbacks y
 # se distinguen por el device_id guardado en userdata.
+# Estado lógico actual por dispositivo; todos arrancan apagados ("off"), igual que el firmware.
+estados: dict[str, str] = {}
+
+
+def publicar_estado(client, device_id, state):
+    topico = f"{PREFIJO_TOPICOS}/switch/{device_id}/telemetry"
+    feedback = json.dumps(con_ts({"state": state}))
+    client.publish(topico, feedback, qos=1, retain=True)
+    print(f"[{topico}] -> {feedback}", flush=True)
 
 
 def on_connect(client, device_id, flags, rc):
+    if rc != 0:
+        print(f"[{device_id}] error al conectar al broker (rc={rc})", flush=True)
+        return
+    client.publish(f"{PREFIJO_TOPICOS}/switch/{device_id}/status", json.dumps(con_ts({"online": True})), qos=1, retain=True)
+    # Igual que el firmware: publica el estado actual retenido al arrancar ("off") y tras cada reconexión
+    estado_actual = estados.setdefault(device_id, "off")
+    publicar_estado(client, device_id, estado_actual)
     comandos = f"{PREFIJO_TOPICOS}/switch/{device_id}/command"
     client.subscribe(comandos, qos=1)
     print(f"[{device_id}] conectado; suscrito a {comandos}", flush=True)
-    client.publish(f"{PREFIJO_TOPICOS}/switch/{device_id}/status", json.dumps(con_ts({"online": True})), qos=1, retain=True)
 
 
 def on_message(client, device_id, msg):
@@ -33,10 +48,8 @@ def on_message(client, device_id, msg):
         print(f"[{msg.topic}] -> Payload invalido: se requiere state \"on\" u \"off\" ({raw})", flush=True)
         return
     print(f"[{msg.topic}] -> Recibido '{state}'", flush=True)
-    topico = f"{PREFIJO_TOPICOS}/switch/{device_id}/telemetry"
-    feedback = json.dumps(con_ts({"state": state}))
-    client.publish(topico, feedback, qos=1, retain=True)
-    print(f"[{topico}] -> {feedback}", flush=True)
+    estados[device_id] = state
+    publicar_estado(client, device_id, state)
 
 
 ids = dispositivos("switch", "cccccccccccc")

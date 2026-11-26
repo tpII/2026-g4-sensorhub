@@ -8,6 +8,9 @@
 // Tipo de callback para recepcion de mensajes MQTT (actuadores/comandos)
 typedef void (*mqtt_msg_callback_t)(const char *topic, int topic_len, const char *data, int data_len);
 
+// Tipo de callback invocado en cada conexion/reconexion al broker MQTT
+typedef void (*mqtt_connect_callback_t)(void);
+
 // Inicializa el cliente MQTT con el protocolo seleccionado en app_config.h y el client_id indicado
 esp_err_t mqtt_mgr_init(const char *client_id);
 
@@ -19,6 +22,9 @@ esp_err_t mqtt_mgr_subscribe(const char *topic, int qos);
 
 // Registra callback para mensajes entrantes
 void mqtt_mgr_set_on_message_callback(mqtt_msg_callback_t cb);
+
+// Registra callback para eventos de conexion/reconexion al broker
+void mqtt_mgr_set_on_connect_callback(mqtt_connect_callback_t cb);
 
 // Retorna true si el cliente esta conectado al broker
 bool mqtt_mgr_is_connected(void);
