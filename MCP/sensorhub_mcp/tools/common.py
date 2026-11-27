@@ -4,7 +4,7 @@ validación de device_id y ejecución de I/O bloqueante fuera del bucle de event
 
 import functools
 from datetime import datetime, timezone
-from typing import Annotated, Any, Callable, Literal, TypeVar
+from typing import Annotated, Any, Callable, Literal, Optional, TypeVar
 
 import anyio
 from influxdb_client import InfluxDBClient
@@ -119,10 +119,17 @@ def influx(ctx: Context) -> InfluxDBClient:
     return ctx.request_context.lifespan_context.influx
 
 
-async def validate_device_id(device_id: str, device_type: DeviceType, type_label: str) -> str:
+async def validate_device_id(
+    device_id: str,
+    device_type: Optional[DeviceType] = None,
+    type_label: str = "dispositivo",
+) -> str:
     """Lleva el device_id a su forma canónica, valida su formato y verifica que
     esté registrado con el tipo esperado. Devuelve el id registrado o lanza
-    ToolError, que el SDK informa al modelo como resultado con isError=true."""
+    ToolError, que el SDK informa al modelo como resultado con isError=true.
+
+    Sin `device_type` acepta un dispositivo de cualquier tipo: lo necesitan las
+    tools del canal `status`, transversal a los tres (ver wiki, 03, sección 1)."""
     canonical = canonical_device_id(device_id)
     if not is_safe_device_id(canonical):
         raise ToolError("El device_id no tiene un formato válido.")

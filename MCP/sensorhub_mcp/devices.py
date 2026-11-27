@@ -73,10 +73,18 @@ def canonical_device_id(device_id: str) -> str:
 # contra el registro y no contra InfluxDB o el broker porque estos solo dicen
 # si el dispositivo publicó alguna vez, no si está registrado.
 def find_registered_device(device_id: str, device_type: Optional[str] = None) -> Optional[str]:
+    entry = find_registered_entry(device_id, device_type)
+    return entry["device_id"] if entry else None
+
+
+# Igual que find_registered_device pero devuelve la fila entera del registro. La
+# necesitan las tools del canal `status`, que arman un tópico MQTT y por lo tanto
+# precisan el device_type además del id (ver wiki, 03, sección 1).
+def find_registered_entry(device_id: str, device_type: Optional[str] = None) -> Optional[dict]:
     canonical = canonical_device_id(device_id)
     for entry in load_device_registry(device_type):
         if entry["device_id"].lower() == canonical:
-            return entry["device_id"]
+            return entry
     return None
 
 
